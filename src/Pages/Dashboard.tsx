@@ -23,7 +23,10 @@ import {
     TextField,
     InputAdornment,
     Tabs,
-    Tab
+    Tab,
+    Select,
+    MenuItem,
+    FormControl
 } from '@mui/material';
 import { Users, Database, RefreshCw, Mail, FileText, Eye, X, Search, Edit, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
@@ -44,6 +47,9 @@ const Dashboard = () => {
     const [deleteTeamId, setDeleteTeamId] = useState<string | null>(null);
     const [editTeam, setEditTeam] = useState<any>(null);
     const [editFormData, setEditFormData] = useState<any>({});
+    const [processingSelectionId, setProcessingSelectionId] = useState<string | null>(null);
+    const [sendingBulkMails, setSendingBulkMails] = useState(false);
+    const [bulkEmailType, setBulkEmailType] = useState('selection');
 
     const fetchTeams = async () => {
         setRefreshing(true);
@@ -56,6 +62,10 @@ const Dashboard = () => {
             let query = supabase
                 .from('teams')
                 .select('*', { count: 'exact' });
+
+            if (currentTab === 2) {
+                query = query.eq('is_selected', true);
+            }
 
             if (searchTerm.trim() !== '') {
                 // Safely searching common text columns based on exact schema
@@ -130,6 +140,83 @@ const Dashboard = () => {
         }
     };
 
+    const handleToggleSelection = async (team: any) => {
+        setProcessingSelectionId(team.id);
+        try {
+            const newStatus = !team.is_selected;
+            const { error } = await supabase.from('teams').update({ is_selected: newStatus }).eq('id', team.id);
+            if (error) throw error;
+
+            if (newStatus) {
+                try {
+                    const res = await fetch('http://localhost:5000/api/emails/send-selection', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ team })
+                    });
+                    if (!res.ok) throw new Error('Failed to send email');
+                } catch (emailErr) {
+                    console.error('Email error:', emailErr);
+                    alert(`Team ${team.team_name || team.leader_name} selected but failed to send email. Ensure server is running on port 5000.`);
+                }
+            }
+
+            fetchTeams();
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setProcessingSelectionId(null);
+        }
+    };
+
+    const handleSendBulkMails = async () => {
+        const typeLabels: Record<string, string> = {
+            selection: "Selection/Congratulations",
+            invitation: "Official Invitation Document",
+            room_allotment: "Room Allotment Details"
+        };
+        const confirmation = window.confirm(`Are you sure you want to send "${typeLabels[bulkEmailType]}" emails to all selected teams? This might take a while.`);
+        if (!confirmation) return;
+
+        setSendingBulkMails(true);
+        try {
+            // Fetch all selected teams to ensure we have everyone, not just the current page
+            const { data: selectedTeams, error } = await supabase.from('teams').select('*').eq('is_selected', true);
+
+            if (error) throw error;
+            if (!selectedTeams || selectedTeams.length === 0) {
+                alert("No selected teams found.");
+                setSendingBulkMails(false);
+                return;
+            }
+
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const team of selectedTeams) {
+                try {
+                    const res = await fetch('http://localhost:5000/api/emails/send-bulk', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ team, emailType: bulkEmailType })
+                    });
+                    if (!res.ok) throw new Error('Failed');
+                    successCount++;
+                } catch (emailErr) {
+                    console.error('Email error for team:', team.team_name, emailErr);
+                    failCount++;
+                }
+            }
+
+            alert(`Finished sending bulk emails.\nSuccess: ${successCount}\nFailed: ${failCount}`);
+        } catch (err: any) {
+            console.error("Error fetching selected teams:", err);
+            alert("Error: " + err.message);
+        } finally {
+            setSendingBulkMails(false);
+        }
+    };
+
     if (loading && teams.length === 0) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
@@ -179,7 +266,7 @@ const Dashboard = () => {
             </Box>
 
             {/* Tabs & Search Bar */}
-            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', md: 'center' }, gap: 2, mb: 3 }}>
+            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'stretch', md: 'flex-start' }, gap: 2, mb: 3 }}>
                 <Tabs
                     value={currentTab}
                     onChange={(_, newValue) => { setCurrentTab(newValue); setPage(0); }}
@@ -189,39 +276,107 @@ const Dashboard = () => {
                 >
                     <Tab label="DIRECTORY" />
                     <Tab label="MANAGE TEAMS" />
+                    <Tab label="SELECTED TEAMS" />
                 </Tabs>
 
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                    <TextField
-                        placeholder="Search Teams, Leaders..."
-                        variant="outlined"
-                        size="small"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && fetchTeams()}
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start"><Search size={18} color="#ff0000" /></InputAdornment>,
-                        }}
-                        sx={{
-                            flexGrow: 1,
-                            minWidth: { xs: '100%', md: '300px' },
-                            '& .MuiOutlinedInput-root': {
-                                borderRadius: 1,
-                                bgcolor: 'rgba(255,255,255,0.02)',
-                                '& fieldset': { borderColor: 'rgba(255,0,0,0.2)' },
-                                '&:hover fieldset': { borderColor: 'rgba(255,0,0,0.5)' },
-                                '&.Mui-focused fieldset': { borderColor: '#ff0000' }
-                            }
-                        }}
-                    />
-                    <Button
-                        variant="contained"
-                        onClick={() => { setPage(0); fetchTeams(); }}
-                        sx={{ borderRadius: 0.5, fontFamily: 'Azonix', px: 3, boxShadow: '0 0 10px rgba(255,0,0,0.3)' }}
-                    >
-                        SEARCH
-                    </Button>
-                </Box>
+                <Stack spacing={2} sx={{ width: { xs: '100%', md: 'auto' }, alignItems: { xs: 'stretch', md: 'flex-end' } }}>
+                    {/* Bulk Email UI (On Top of Searchbar) */}
+                    {currentTab === 2 && (
+                        <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: { xs: 'flex-start', md: 'flex-end' } }}>
+                            <FormControl size="small" sx={{
+                                minWidth: 260,
+                                '& .MuiOutlinedInput-root': {
+                                    borderRadius: 1,
+                                    bgcolor: 'rgba(0,255,0,0.05)',
+                                    color: '#00ff00',
+                                    fontFamily: 'Azonix',
+                                    fontSize: '0.8rem',
+                                    '& fieldset': { borderColor: 'rgba(0,255,0,0.3)' },
+                                    '&:hover fieldset': { borderColor: 'rgba(0,255,0,0.7)' },
+                                    '&.Mui-focused fieldset': { borderColor: '#00ff00' }
+                                },
+                                '& .MuiSelect-icon': { color: '#00ff00' }
+                            }}>
+                                <Select
+                                    value={bulkEmailType}
+                                    onChange={(e) => setBulkEmailType(e.target.value)}
+                                    // Make sure Paper matches dark theme
+                                    MenuProps={{
+                                        PaperProps: {
+                                            sx: {
+                                                bgcolor: '#1a1a1a',
+                                                border: '1px solid #00ff00',
+                                                '& .MuiMenuItem-root': {
+                                                    fontFamily: 'Azonix',
+                                                    fontSize: '0.8rem',
+                                                    color: '#fff',
+                                                    '&:hover': { bgcolor: 'rgba(0,255,0,0.2)', color: '#00ff00' },
+                                                    '&.Mui-selected': { bgcolor: 'rgba(0,255,0,0.3) !important', color: '#00ff00' }
+                                                }
+                                            }
+                                        }
+                                    }}
+                                >
+                                    <MenuItem value="selection">CONGRATULATIONS EMAIL</MenuItem>
+                                    <MenuItem value="invitation">INVITATION DOC EMAIL</MenuItem>
+                                    <MenuItem value="room_allotment">ROOM ALLOTMENT EMAIL</MenuItem>
+                                </Select>
+                            </FormControl>
+                            <Button
+                                variant="contained"
+                                onClick={handleSendBulkMails}
+                                disabled={sendingBulkMails}
+                                sx={{
+                                    borderRadius: 0.5,
+                                    fontFamily: 'Azonix',
+                                    px: 3,
+                                    bgcolor: '#00ff00',
+                                    color: '#000',
+                                    fontWeight: 800,
+                                    borderColor: 'transparent',
+                                    '&:hover': { bgcolor: '#00cc00' },
+                                    '&.Mui-disabled': { bgcolor: 'rgba(0,255,0,0.3)', color: 'rgba(0,0,0,0.5)' }
+                                }}
+                                startIcon={<Mail size={18} />}
+                            >
+                                {sendingBulkMails ? 'SENDING...' : 'SEND'}
+                            </Button>
+                        </Box>
+                    )}
+
+                    {/* Search Bar UI */}
+                    <Box sx={{ display: 'flex', gap: 2, width: '100%' }}>
+                        <TextField
+                            placeholder="Search Teams, Leaders..."
+                            variant="outlined"
+                            size="small"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && fetchTeams()}
+                            InputProps={{
+                                startAdornment: <InputAdornment position="start"><Search size={18} color="#ff0000" /></InputAdornment>,
+                            }}
+                            sx={{
+                                flexGrow: 1,
+                                minWidth: { xs: '100%', md: '300px' },
+                                '& .MuiOutlinedInput-root': {
+                                    borderRadius: 1,
+                                    bgcolor: 'rgba(255,255,255,0.02)',
+                                    '& fieldset': { borderColor: 'rgba(255,0,0,0.2)' },
+                                    '&:hover fieldset': { borderColor: 'rgba(255,0,0,0.5)' },
+                                    '&.Mui-focused fieldset': { borderColor: '#ff0000' }
+                                }
+                            }}
+                        />
+                        <Button
+                            variant="contained"
+                            onClick={() => { setPage(0); fetchTeams(); }}
+                            sx={{ borderRadius: 0.5, fontFamily: 'Azonix', px: 3, boxShadow: '0 0 10px rgba(255,0,0,0.3)' }}
+                        >
+                            SEARCH
+                        </Button>
+                    </Box>
+                </Stack>
             </Box>
 
             {error && (
@@ -271,7 +426,7 @@ const Dashboard = () => {
                                         );
                                     })}
                                     <TableCell sx={{ py: 2, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                                        {currentTab === 0 ? (
+                                        {currentTab === 0 || currentTab === 2 ? (
                                             <Stack direction="row" spacing={1} justifyContent="flex-end">
                                                 <Button
                                                     variant="outlined"
@@ -286,20 +441,17 @@ const Dashboard = () => {
                                                 <Button
                                                     variant="contained"
                                                     size="small"
-                                                    startIcon={<Mail size={16} />}
-                                                    onClick={() => handleSendMail(team)}
-                                                    sx={{ fontWeight: 800, borderRadius: 0.6, px: 2, bgcolor: 'rgba(255,0,0,0.1)', color: '#ff0000', border: '1px solid rgba(255,0,0,0.5)', '&:hover': { bgcolor: 'primary.main', color: 'white' } }}
+                                                    disabled={processingSelectionId === team.id}
+                                                    onClick={() => handleToggleSelection(team)}
+                                                    sx={{
+                                                        fontWeight: 800, borderRadius: 0.6, px: 2,
+                                                        bgcolor: team.is_selected ? 'rgba(255,165,0,0.1)' : 'rgba(0,191,255,0.1)',
+                                                        color: team.is_selected ? '#ffa500' : '#00bfff',
+                                                        border: `1px solid ${team.is_selected ? 'rgba(255,165,0,0.5)' : 'rgba(0,191,255,0.5)'}`,
+                                                        '&:hover': { bgcolor: team.is_selected ? '#ffa500' : '#00bfff', color: team.is_selected ? 'black' : 'white' }
+                                                    }}
                                                 >
-                                                    MAIL
-                                                </Button>
-                                                <Button
-                                                    variant="contained"
-                                                    size="small"
-                                                    startIcon={<FileText size={16} />}
-                                                    onClick={() => handleSendInvitation(team)}
-                                                    sx={{ fontWeight: 800, borderRadius: 0.6, px: 2, bgcolor: 'rgba(0, 255, 0, 0.1)', color: '#00ff00', border: '1px solid rgba(0, 255, 0, 0.5)', '&:hover': { bgcolor: '#00ff00', color: 'black' } }}
-                                                >
-                                                    INVITE
+                                                    {processingSelectionId === team.id ? 'PROCESSING...' : team.is_selected ? 'DESELECT' : 'SELECT'}
                                                 </Button>
                                             </Stack>
                                         ) : (

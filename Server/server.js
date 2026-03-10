@@ -1,7 +1,8 @@
-const serverApp = require('./src/app');
+import 'dotenv/config';
+import serverApp from './src/app.js';
 const PORT = process.env.PORT || 5000;
 
-serverApp.get('/', async (req: any, res: any) => {
+serverApp.get('/', async (req, res) => {
     res.send('Hello World!');
 });
 
