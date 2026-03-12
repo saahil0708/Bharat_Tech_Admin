@@ -77,6 +77,17 @@ const Layout = () => {
                         >
                             ATTENDANCE
                         </Button>
+                        <Button
+                            onClick={() => navigate('/admin/broadcast')}
+                            sx={{
+                                fontFamily: 'Azonix',
+                                color: location.pathname === '/admin/broadcast' ? '#ff0000' : 'text.secondary',
+                                fontWeight: 800,
+                                '&:hover': { color: 'white' }
+                            }}
+                        >
+                            BROADCAST
+                        </Button>
                     </Box>
 
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'Azonix' }}>

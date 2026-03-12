@@ -25,10 +25,12 @@ import {
     Tabs,
     Tab
 } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import { Users, Database, RefreshCw, Mail, FileText, Eye, X, Search, Edit, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 const Dashboard = () => {
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [teams, setTeams] = useState<any[]>([]);
     const [error, setError] = useState<string | null>(null);
@@ -159,23 +161,42 @@ const Dashboard = () => {
                         <Users size={16} /> Viewing registered teams from Supabase
                     </Typography>
                 </Box>
-                <Tooltip title="Refresh Data">
-                    <IconButton
-                        onClick={fetchTeams}
-                        disabled={refreshing}
-                        sx={{
-                            bgcolor: 'rgba(255,0,0,0.1)',
+                <Stack direction="row" spacing={2}>
+                    <Button
+                        variant="contained"
+                        onClick={() => navigate('/admin/broadcast')}
+                        startIcon={<Mail size={20} />}
+                        sx={{ 
+                            borderRadius: 2, 
+                            fontFamily: 'Azonix', 
+                            px: 3, 
+                            bgcolor: 'rgba(255,0,0,0.1)', 
                             color: '#ff0000',
-                            border: '1px solid rgba(255,0,0,0.2)',
-                            borderRadius: 2,
-                            p: 1.5,
-                            '&:hover': { bgcolor: 'rgba(255,0,0,0.2)' },
-                            ...(refreshing && { animation: 'spin 1s linear infinite' })
+                            border: '1px solid #ff0000',
+                            boxShadow: '0 0 15px rgba(255,0,0,0.2)',
+                            '&:hover': { bgcolor: 'primary.main', color: 'white' }
                         }}
                     >
-                        <RefreshCw size={20} className={refreshing ? "animate-spin" : ""} />
-                    </IconButton>
-                </Tooltip>
+                        MAIL BROADCAST
+                    </Button>
+                    <Tooltip title="Refresh Data">
+                        <IconButton
+                            onClick={fetchTeams}
+                            disabled={refreshing}
+                            sx={{
+                                bgcolor: 'rgba(255,0,0,0.1)',
+                                color: '#ff0000',
+                                border: '1px solid rgba(255,0,0,0.2)',
+                                borderRadius: 2,
+                                p: 1.5,
+                                '&:hover': { bgcolor: 'rgba(255,0,0,0.2)' },
+                                ...(refreshing && { animation: 'spin 1s linear infinite' })
+                            }}
+                        >
+                            <RefreshCw size={20} className={refreshing ? "animate-spin" : ""} />
+                        </IconButton>
+                    </Tooltip>
+                </Stack>
             </Box>
 
             {/* Tabs & Search Bar */}

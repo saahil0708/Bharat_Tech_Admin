@@ -4,6 +4,7 @@ import Dashboard from "./Pages/Dashboard";
 import Login from "./Pages/Login";
 import MarkAttendance from "./Pages/MarkAttendance";
 import AttendanceAdmin from "./Pages/AttendanceAdmin";
+import EmailBroadcast from "./Pages/EmailBroadcast";
 import ProtectedLayout from "./Layout/ProtectedLayout";
 import { ThemeProvider, createTheme, CssBaseline } from "@mui/material";
 
@@ -57,6 +58,10 @@ const router = createBrowserRouter([
                     {
                         path: "attendance",
                         element: <AttendanceAdmin />,
+                    },
+                    {
+                        path: "broadcast",
+                        element: <EmailBroadcast />,
                     },
                 ],
             },
