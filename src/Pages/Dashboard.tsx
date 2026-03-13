@@ -419,9 +419,25 @@ const Dashboard = () => {
                                         } else if (typeof val === 'string' && col.includes('at') && val.includes('T')) {
                                             content = new Date(val).toLocaleDateString();
                                         }
+                                        
+                                        let displayContent: React.ReactNode = content || '-';
+                                        if (typeof content === 'string' && content.length > 50) {
+                                            displayContent = (
+                                                <>
+                                                    {content.substring(0, 50)}
+                                                    <span 
+                                                        style={{ color: '#ff0000', cursor: 'pointer', marginLeft: '4px', fontWeight: 'bold' }} 
+                                                        onClick={() => setSelectedTeam(team)}
+                                                    >
+                                                        see more...
+                                                    </span>
+                                                </>
+                                            );
+                                        }
+
                                         return (
-                                            <TableCell key={col} sx={{ py: 2, color: 'text.secondary', whiteSpace: 'nowrap' }}>
-                                                {content || '-'}
+                                            <TableCell key={col} sx={{ py: 2, color: 'text.secondary', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                {displayContent}
                                             </TableCell>
                                         );
                                     })}
