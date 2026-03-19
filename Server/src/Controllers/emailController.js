@@ -1,4 +1,5 @@
 import nodemailerConfig from 'nodemailer';
+import getSelectionEmailHtml from '../Templates/selectionEmail.js';
 
 const transporter = nodemailerConfig.createTransport({
     service: 'gmail',
@@ -25,24 +26,7 @@ const sendSelectionEmail = async (req, res) => {
             from: process.env.EMAIL_USER || '"Bharat Tech Admin" <admin@bharattech.edu>',
             to: toEmail,
             subject: 'Congratulations! Your team has been selected for Bharat Tech',
-            html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-                    <h2 style="color: #ff0000; text-align: center; text-transform: uppercase;">Congratulations, Team ${team.team_name || 'Leader'}!</h2>
-                    <p>Dear ${team.leader_name || 'Participant'},</p>
-                    <p>We are thrilled to inform you that your team has successfully passed the online round and has been <strong>selected</strong> to proceed further in Bharat Tech!</p>
-                    <p>You are now invited to the offline round on campus. Please find the necessary information below:</p>
-                    <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                        <ul style="list-style-type: none; padding: 0; margin: 0; color: #333;">
-                            <li style="margin-bottom: 10px;"><strong>Venue:</strong> Campus Guidelines Apply</li>
-                            <li style="margin-bottom: 10px;"><strong>Details:</strong> Offline details will be shared soon.</li>
-                        </ul>
-                    </div>
-                    <p>Please ensure all team members bring their required documents and any necessary project materials.</p>
-                    <br/>
-                    <p>Best Regards,</p>
-                    <p><strong>Bharat Tech Organizing Team</strong></p>
-                </div>
-            `
+            html: getSelectionEmailHtml(team)
         };
 
         if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
@@ -77,24 +61,7 @@ const sendBulkEmail = async (req, res) => {
         switch (emailType) {
             case 'selection':
                 subject = 'Congratulations! Your team has been selected for Bharat Tech';
-                htmlContent = `
-                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-                        <h2 style="color: #ff0000; text-align: center; text-transform: uppercase;">Congratulations, Team ${team.team_name || 'Leader'}!</h2>
-                        <p>Dear ${team.leader_name || 'Participant'},</p>
-                        <p>We are thrilled to inform you that your team has successfully passed the online round and has been <strong>selected</strong> to proceed further in Bharat Tech!</p>
-                        <p>You are now invited to the offline round on campus. Please find the necessary information below:</p>
-                        <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                            <ul style="list-style-type: none; padding: 0; margin: 0; color: #333;">
-                                <li style="margin-bottom: 10px;"><strong>Venue:</strong> Campus Guidelines Apply</li>
-                                <li style="margin-bottom: 10px;"><strong>Details:</strong> Offline details will be shared soon.</li>
-                            </ul>
-                        </div>
-                        <p>Please ensure all team members bring their required documents and any necessary project materials.</p>
-                        <br/>
-                        <p>Best Regards,</p>
-                        <p><strong>Bharat Tech Organizing Team</strong></p>
-                    </div>
-                `;
+                htmlContent = getSelectionEmailHtml(team);
                 break;
             case 'invitation':
                 subject = 'Bharat Tech - Official Invitation Document';
