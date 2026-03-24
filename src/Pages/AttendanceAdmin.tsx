@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, IconButton, Tooltip, TextField, InputAdornment, Button, TablePagination } from '@mui/material';
-import { CheckCircle2, XCircle, Search, RefreshCw, Users, FileDown } from 'lucide-react';
+import { CheckCircle2, XCircle, Search, RefreshCw, Users, FileDown, Hotel } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { rooms } from '../data/rooms';
 
 const AttendanceAdmin = () => {
     const [teams, setTeams] = useState<any[]>([]);
@@ -11,6 +12,7 @@ const AttendanceAdmin = () => {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [totalCount, setTotalCount] = useState(0);
     const [globalPresentCount, setGlobalPresentCount] = useState(0);
+    const [filteredCount, setFilteredCount] = useState(0);
 
     const fetchAttendance = async () => {
         setLoading(true);
@@ -18,7 +20,8 @@ const AttendanceAdmin = () => {
             const from = page * rowsPerPage;
             const to = from + rowsPerPage - 1;
 
-            let query = supabase.from('teams').select('*', { count: 'exact' });
+            // Fetch data for the main list (filtered for present teams)
+            let query = supabase.from('teams').select('*', { count: 'exact' }).eq('is_present', true);
             if (searchTerm.trim() !== '') {
                 query = query.or(`team_name.ilike.%${searchTerm}%,team_code.ilike.%${searchTerm}%`);
             }
@@ -28,17 +31,16 @@ const AttendanceAdmin = () => {
 
             if (error) throw error;
             setTeams(data || []);
-            if (count !== null) setTotalCount(count);
+            if (count !== null) setFilteredCount(count);
 
-            // Fetch global present count
-            const { count: presentCountData, error: presentError } = await supabase
-                .from('teams')
-                .select('*', { count: 'exact', head: true })
-                .eq('is_present', true);
+            // Fetch global counts for the header
+            const [{ count: presentCount }, { count: totalTeamsCount }] = await Promise.all([
+                supabase.from('teams').select('*', { count: 'exact', head: true }).eq('is_present', true),
+                supabase.from('teams').select('*', { count: 'exact', head: true })
+            ]);
 
-            if (!presentError && presentCountData !== null) {
-                setGlobalPresentCount(presentCountData);
-            }
+            if (presentCount !== null) setGlobalPresentCount(presentCount);
+            if (totalTeamsCount !== null) setTotalCount(totalTeamsCount);
 
         } catch (err: any) {
             console.error(err);
@@ -58,6 +60,105 @@ const AttendanceAdmin = () => {
     const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
         setRowsPerPage(parseInt(event.target.value, 10));
         setPage(0);
+    };
+
+    const handleExportCSV = async () => {
+        setLoading(true);
+        try {
+            // Fetch ALL teams in the database, ignoring current filters for "overall data"
+            const { data: allTeams, error } = await supabase
+                .from('teams')
+                .select('*')
+                .order('created_at', { ascending: true });
+
+            if (error) throw error;
+            if (!allTeams || allTeams.length === 0) {
+                alert("No data available to export.");
+                return;
+            }
+
+            // Dynamically determine all columns from the first record
+            const exportColumns = Object.keys(allTeams[0]).filter(k => k !== 'count');
+            const headers = exportColumns.map(col => col.replace(/_/g, ' ').toUpperCase());
+            const csvRows = [headers.join(',')];
+
+            allTeams.forEach(team => {
+                const row = exportColumns.map(col => {
+                    let val = team[col];
+                    if (val === null || val === undefined) return '""';
+                    if (typeof val === 'boolean') val = val ? "YES" : "NO";
+                    // Escape quotes and wrap in quotes to handle commas within values
+                    return `"${String(val).replace(/"/g, '""')}"`;
+                });
+                csvRows.push(row.join(','));
+            });
+
+            const csvContent = csvRows.join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `attendance_complete_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            alert(`Export successful! ${allTeams.length} records processed.`);
+        } catch (err: any) {
+            console.error(err);
+            alert("Failed to export: " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAssignRooms = async () => {
+        const confirmAssign = window.confirm("Are you sure you want to randomly assign rooms to all present teams? This will overwrite existing assignments.");
+        if (!confirmAssign) return;
+
+        setLoading(true);
+        try {
+            // Fetch ALL present teams, not just the current page
+            const { data: allPresentTeams, error: fetchError } = await supabase
+                .from('teams')
+                .select('*')
+                .eq('is_present', true);
+
+            if (fetchError) throw fetchError;
+            if (!allPresentTeams || allPresentTeams.length === 0) {
+                alert("No present teams found to assign.");
+                return;
+            }
+
+            // Shuffle teams randomly
+            const shuffledTeams = [...allPresentTeams].sort(() => Math.random() - 0.5);
+            
+            let teamIdx = 0;
+            const updates = [];
+
+            for (const room of rooms) {
+                for (let i = 0; i < room.capacity && teamIdx < shuffledTeams.length; i++) {
+                    const team = shuffledTeams[teamIdx++];
+                    updates.push(
+                        supabase.from('teams').update({ room_no: room.name }).eq('id', team.id)
+                    );
+                }
+            }
+
+            if (teamIdx < shuffledTeams.length) {
+                alert(`Warning: Not enough room capacity! Only ${teamIdx} out of ${shuffledTeams.length} teams were assigned rooms.`);
+            }
+
+            await Promise.all(updates);
+            alert(`Successfully assigned rooms to ${teamIdx} teams.`);
+            fetchAttendance();
+        } catch (err: any) {
+            console.error(err);
+            alert("Error assigning rooms: " + err.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Remove local presentCount calculation as it only reflects current page
@@ -89,9 +190,20 @@ const AttendanceAdmin = () => {
                                 <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
                             </IconButton>
                         </Tooltip>
+                        <Tooltip title="Assign Rooms">
+                            <Button
+                                variant="contained"
+                                onClick={handleAssignRooms}
+                                disabled={loading}
+                                sx={{ bgcolor: 'rgba(0,191,255,0.1)', color: '#00bfff', border: '1px solid rgba(0,191,255,0.3)', minWidth: '48px', px: 0, borderRadius: 2, '&:hover': { bgcolor: '#00bfff', color: 'black' } }}
+                            >
+                                <Hotel size={20} />
+                            </Button>
+                        </Tooltip>
                         <Tooltip title="Export Report">
                             <Button
                                 variant="contained"
+                                onClick={handleExportCSV}
                                 sx={{ bgcolor: '#00ff00', color: 'black', minWidth: '48px', px: 0, borderRadius: 2, '&:hover': { bgcolor: '#00cc00' } }}
                             >
                                 <FileDown size={20} />
@@ -128,6 +240,7 @@ const AttendanceAdmin = () => {
                         <TableRow sx={{ bgcolor: 'rgba(255,0,0,0.05)' }}>
                             <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>TEAM NAME</TableCell>
                             <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>UNIQUE CODE</TableCell>
+                            <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>ROOM NO</TableCell>
                             <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix', textAlign: 'center' }}>STATUS</TableCell>
                         </TableRow>
                     </TableHead>
@@ -136,6 +249,7 @@ const AttendanceAdmin = () => {
                             <TableRow key={team.id} sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' } }}>
                                 <TableCell sx={{ fontWeight: 600, color: 'white' }}>{team.team_name || 'N/A'}</TableCell>
                                 <TableCell sx={{ color: 'text.secondary', fontFamily: 'monospace', letterSpacing: 1 }}>{team.team_code || '---'}</TableCell>
+                                <TableCell sx={{ color: '#00ff00', fontWeight: 700 }}>{team.room_no || 'NOT ASSIGNED'}</TableCell>
                                 <TableCell sx={{ textAlign: 'center' }}>
                                     {team.is_present ? (
                                         <Chip
@@ -177,7 +291,7 @@ const AttendanceAdmin = () => {
                 {teams.length > 0 && (
                     <TablePagination
                         component="div"
-                        count={totalCount}
+                        count={filteredCount}
                         page={page}
                         onPageChange={handleChangePage}
                         rowsPerPage={rowsPerPage}

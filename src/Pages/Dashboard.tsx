@@ -28,7 +28,7 @@ import {
     MenuItem,
     FormControl
 } from '@mui/material';
-import { Users, Database, RefreshCw, Mail, FileText, Eye, X, Search, Edit, Trash2 } from 'lucide-react';
+import { Users, Database, RefreshCw, Mail, FileText, Eye, X, Search, Edit, Trash2, FileDown } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 const Dashboard = () => {
@@ -169,6 +169,57 @@ const Dashboard = () => {
         }
     };
 
+    const handleExportCSV = async () => {
+        setRefreshing(true);
+        try {
+            // Fetch ALL teams in the database, ignoring current filters for "overall data"
+            const { data: allTeams, error } = await supabase
+                .from('teams')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            if (!allTeams || allTeams.length === 0) {
+                alert("No data available to export.");
+                return;
+            }
+
+            // Dynamically determine all columns from the first record
+            const exportColumns = Object.keys(allTeams[0]).filter(k => k !== 'count');
+            const headers = exportColumns.map(col => col.replace(/_/g, ' ').toUpperCase());
+            const csvRows = [headers.join(',')];
+
+            // Map teams data to CSV rows
+            allTeams.forEach(team => {
+                const row = exportColumns.map(col => {
+                    let val = team[col];
+                    if (val === null || val === undefined) return '""';
+                    // Escape quotes and wrap in quotes to handle commas within values
+                    return `"${String(val).replace(/"/g, '""')}"`;
+                });
+                csvRows.push(row.join(','));
+            });
+
+            const csvContent = csvRows.join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `teams_directory_complete_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            alert(`Export successful! ${allTeams.length} records processed.`);
+        } catch (err: any) {
+            console.error("Export Error:", err);
+            alert("Failed to export: " + err.message);
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
     const handleSendBulkMails = async () => {
         const typeLabels: Record<string, string> = {
             selection: "Selection/Congratulations",
@@ -229,7 +280,7 @@ const Dashboard = () => {
     const allColumns = teams.length > 0 ? Object.keys(teams[0]).filter(k => k !== 'id' && k !== 'count') : [];
 
     // Define preferred columns to show in the minimal table view
-    const preferredColumns = ['team_name', 'leader_name', 'leader_phone', 'project_description', 'team_code'];
+    const preferredColumns = ['team_name', 'leader_name', 'leader_phone', 'institution_name', 'team_code'];
     let displayColumns = preferredColumns.filter(c => allColumns.includes(c));
     if (displayColumns.length === 0) {
         displayColumns = allColumns.slice(0, 4); // Fallback to first 4 if preferred don't exist
@@ -246,23 +297,34 @@ const Dashboard = () => {
                         <Users size={16} /> Viewing registered teams from Supabase
                     </Typography>
                 </Box>
-                <Tooltip title="Refresh Data">
-                    <IconButton
-                        onClick={fetchTeams}
-                        disabled={refreshing}
-                        sx={{
-                            bgcolor: 'rgba(255,0,0,0.1)',
-                            color: '#ff0000',
-                            border: '1px solid rgba(255,0,0,0.2)',
-                            borderRadius: 2,
-                            p: 1.5,
-                            '&:hover': { bgcolor: 'rgba(255,0,0,0.2)' },
-                            ...(refreshing && { animation: 'spin 1s linear infinite' })
-                        }}
-                    >
-                        <RefreshCw size={20} className={refreshing ? "animate-spin" : ""} />
-                    </IconButton>
-                </Tooltip>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Tooltip title="Refresh Data">
+                            <IconButton
+                                onClick={fetchTeams}
+                                disabled={refreshing}
+                                sx={{
+                                    bgcolor: 'rgba(255,0,0,0.1)',
+                                    color: '#ff0000',
+                                    border: '1px solid rgba(255,0,0,0.2)',
+                                    borderRadius: 2,
+                                    p: 1.5,
+                                    '&:hover': { bgcolor: 'rgba(255,0,0,0.2)' },
+                                    ...(refreshing && { animation: 'spin 1s linear infinite' })
+                                }}
+                                >
+                                <RefreshCw size={20} className={refreshing ? "animate-spin" : ""} />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Export to CSV">
+                            <Button
+                                variant="contained"
+                                onClick={handleExportCSV}
+                                sx={{ bgcolor: '#00ff00', color: 'black', minWidth: '48px', px: 0, borderRadius: 2, '&:hover': { bgcolor: '#00cc00' } }}
+                                >
+                                <FileDown size={20} />
+                            </Button>
+                        </Tooltip>
+                    </Box>
             </Box>
 
             {/* Tabs & Search Bar */}
