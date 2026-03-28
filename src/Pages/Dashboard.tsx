@@ -43,6 +43,7 @@ const Dashboard = () => {
     // New Feature States
     const [selectedTeam, setSelectedTeam] = useState<any>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [institutionFilter, setInstitutionFilter] = useState('');
     const [currentTab, setCurrentTab] = useState(0);
     const [deleteTeamId, setDeleteTeamId] = useState<string | null>(null);
     const [editTeam, setEditTeam] = useState<any>(null);
@@ -68,8 +69,12 @@ const Dashboard = () => {
             }
 
             if (searchTerm.trim() !== '') {
-                // Safely searching common text columns based on exact schema
-                query = query.or(`team_name.ilike.%${searchTerm}%,leader_name.ilike.%${searchTerm}%,team_code.ilike.%${searchTerm}%`);
+                // Safely searching common text columns including institution
+                query = query.or(`team_name.ilike.%${searchTerm}%,leader_name.ilike.%${searchTerm}%,team_code.ilike.%${searchTerm}%,institution_name.ilike.%${searchTerm}%`);
+            }
+
+            if (institutionFilter.trim() !== '') {
+                query = query.ilike('institution_name', `%${institutionFilter}%`);
             }
 
             const { data, error, count } = await query
@@ -420,7 +425,26 @@ const Dashboard = () => {
                             }}
                             sx={{
                                 flexGrow: 1,
-                                minWidth: { xs: '100%', md: '300px' },
+                                minWidth: { xs: '100%', md: '250px' },
+                                '& .MuiOutlinedInput-root': {
+                                    borderRadius: 1,
+                                    bgcolor: 'rgba(255,255,255,0.02)',
+                                    '& fieldset': { borderColor: 'rgba(255,0,0,0.2)' },
+                                    '&:hover fieldset': { borderColor: 'rgba(255,0,0,0.5)' },
+                                    '&.Mui-focused fieldset': { borderColor: '#ff0000' }
+                                }
+                            }}
+                        />
+                        <TextField
+                            placeholder="Filter by Institution..."
+                            variant="outlined"
+                            size="small"
+                            value={institutionFilter}
+                            onChange={(e) => setInstitutionFilter(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && fetchTeams()}
+                            sx={{
+                                flexGrow: 1,
+                                minWidth: { xs: '100%', md: '200px' },
                                 '& .MuiOutlinedInput-root': {
                                     borderRadius: 1,
                                     bgcolor: 'rgba(255,255,255,0.02)',

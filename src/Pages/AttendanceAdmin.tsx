@@ -7,6 +7,7 @@ import { rooms } from '../data/rooms';
 const AttendanceAdmin = () => {
     const [teams, setTeams] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [institutionFilter, setInstitutionFilter] = useState('');
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -23,7 +24,11 @@ const AttendanceAdmin = () => {
             // Fetch data for the main list (filtered for present teams)
             let query = supabase.from('teams').select('*', { count: 'exact' }).eq('is_present', true);
             if (searchTerm.trim() !== '') {
-                query = query.or(`team_name.ilike.%${searchTerm}%,team_code.ilike.%${searchTerm}%`);
+                query = query.or(`team_name.ilike.%${searchTerm}%,team_code.ilike.%${searchTerm}%,institution_name.ilike.%${searchTerm}%`);
+            }
+
+            if (institutionFilter.trim() !== '') {
+                query = query.ilike('institution_name', `%${institutionFilter}%`);
             }
             const { data, count, error } = await query
                 .order('created_at', { ascending: true })
@@ -51,7 +56,7 @@ const AttendanceAdmin = () => {
 
     useEffect(() => {
         fetchAttendance();
-    }, [searchTerm, page, rowsPerPage]);
+    }, [searchTerm, institutionFilter, page, rowsPerPage]);
 
     const handleChangePage = (_: unknown, newPage: number) => {
         setPage(newPage);
@@ -213,16 +218,33 @@ const AttendanceAdmin = () => {
                 </Box>
             </Box>
 
-            <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                 <TextField
-                    placeholder="Search by Team Name or Unique Code..."
+                    placeholder="Search by Team Name, Code or Institution..."
                     variant="outlined"
                     size="small"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     InputProps={{ startAdornment: <InputAdornment position="start"><Search size={18} color="#ff0000" /></InputAdornment> }}
                     sx={{
-                        width: { xs: '100%', md: '450px' },
+                        width: { xs: '100%', md: '400px' },
+                        '& .MuiOutlinedInput-root': {
+                            borderRadius: 1,
+                            bgcolor: 'rgba(255,255,255,0.02)',
+                            '& fieldset': { borderColor: 'rgba(255,0,0,0.2)' },
+                            '&:hover fieldset': { borderColor: 'rgba(255,0,0,0.5)' },
+                            '&.Mui-focused fieldset': { borderColor: '#ff0000' }
+                        }
+                    }}
+                />
+                <TextField
+                    placeholder="Filter by Institution..."
+                    variant="outlined"
+                    size="small"
+                    value={institutionFilter}
+                    onChange={(e) => setInstitutionFilter(e.target.value)}
+                    sx={{
+                        width: { xs: '100%', md: '300px' },
                         '& .MuiOutlinedInput-root': {
                             borderRadius: 1,
                             bgcolor: 'rgba(255,255,255,0.02)',
