@@ -8,6 +8,7 @@ const AttendanceAdmin = () => {
     const [teams, setTeams] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [institutionFilter, setInstitutionFilter] = useState('');
+    const [referenceFilter, setReferenceFilter] = useState('');
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -29,6 +30,9 @@ const AttendanceAdmin = () => {
 
             if (institutionFilter.trim() !== '') {
                 query = query.ilike('institution_name', `%${institutionFilter}%`);
+            }
+            if (referenceFilter.trim() !== '') {
+                query = query.ilike('reference_source', `%${referenceFilter}%`);
             }
             const { data, count, error } = await query
                 .order('created_at', { ascending: true })
@@ -56,7 +60,7 @@ const AttendanceAdmin = () => {
 
     useEffect(() => {
         fetchAttendance();
-    }, [searchTerm, institutionFilter, page, rowsPerPage]);
+    }, [searchTerm, institutionFilter, referenceFilter, page, rowsPerPage]);
 
     const handleChangePage = (_: unknown, newPage: number) => {
         setPage(newPage);
@@ -243,6 +247,23 @@ const AttendanceAdmin = () => {
                     size="small"
                     value={institutionFilter}
                     onChange={(e) => setInstitutionFilter(e.target.value)}
+                    sx={{
+                        width: { xs: '100%', md: '300px' },
+                        '& .MuiOutlinedInput-root': {
+                            borderRadius: 1,
+                            bgcolor: 'rgba(255,255,255,0.02)',
+                            '& fieldset': { borderColor: 'rgba(255,0,0,0.2)' },
+                            '&:hover fieldset': { borderColor: 'rgba(255,0,0,0.5)' },
+                            '&.Mui-focused fieldset': { borderColor: '#ff0000' }
+                        }
+                    }}
+                />
+                <TextField
+                    placeholder="Filter by Reference..."
+                    variant="outlined"
+                    size="small"
+                    value={referenceFilter}
+                    onChange={(e) => setReferenceFilter(e.target.value)}
                     sx={{
                         width: { xs: '100%', md: '300px' },
                         '& .MuiOutlinedInput-root': {
