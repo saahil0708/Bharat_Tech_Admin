@@ -9,7 +9,7 @@ export const getApiBaseUrl = async (): Promise<string> => {
     // Try production server first as requested
     const prodResponse = await fetch(`${PROD_API_URL}/`, { 
       method: 'GET',
-      signal: AbortSignal.timeout(5000) // 5 second timeout
+      signal: AbortSignal.timeout(30000) // 30 second timeout for Render cold start
     });
     if (prodResponse.ok) {
       console.log('Using production API server:', PROD_API_URL);
@@ -61,7 +61,7 @@ export const apiFetch = async (
   options: FetchOptions = {}
 ): Promise<Response> => {
   const apiUrl = await getApiBaseUrl();
-  const { timeout = 10000, ...fetchOptions } = options;
+  const { timeout = 45000, ...fetchOptions } = options; // Default to 45s for cold starts
   
   const url = `${apiUrl}${endpoint}`;
   

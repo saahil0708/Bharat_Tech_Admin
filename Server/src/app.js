@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 const app = express();
 
 app.use(express.json());
@@ -10,8 +11,14 @@ const allowedOrigins = [
     'http://localhost:5000',     // Local backend
     'https://bharat-tech-admin.onrender.com',  // Production Render server
     'https://localhost:3000',
-    'https://localhost:5173'
+    'https://localhost:5173',
+    'https://bharat-tech-admin.vercel.app'
 ];
+
+app.use(cors({
+    origin: allowedOrigins,
+    credentials: true
+}));
 
 app.use((req, res, next) => {
     const origin = req.headers.origin;
