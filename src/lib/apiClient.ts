@@ -4,7 +4,12 @@ const LOCAL_API_URL = import.meta.env.VITE_API_BASE_URL_LOCAL || 'http://localho
 const PROD_API_URL = import.meta.env.VITE_API_BASE_URL_PROD || 'https://bharat-tech-admin.onrender.com';
 
 // Function to get the API base URL with fallback
-export const getApiBaseUrl = async (): Promise<string> => {
+export const getApiBaseUrl = async (forceRefresh = false): Promise<string> => {
+  // Use cached URL if available and not forcing refresh
+  if (cachedApiUrl && !forceRefresh) {
+    return cachedApiUrl;
+  }
+
   try {
     // Try production server first as requested
     const prodResponse = await fetch(`${PROD_API_URL}/`, { 
@@ -13,6 +18,7 @@ export const getApiBaseUrl = async (): Promise<string> => {
     });
     if (prodResponse.ok) {
       console.log('Using production API server:', PROD_API_URL);
+      cachedApiUrl = PROD_API_URL;
       return PROD_API_URL;
     }
   } catch (error) {
@@ -27,6 +33,7 @@ export const getApiBaseUrl = async (): Promise<string> => {
     });
     if (localResponse.ok) {
       console.log('Using local API server:', LOCAL_API_URL);
+      cachedApiUrl = LOCAL_API_URL;
       return LOCAL_API_URL;
     }
   } catch (error) {
@@ -35,6 +42,7 @@ export const getApiBaseUrl = async (): Promise<string> => {
 
   // Default to production if both fail (will show error when trying to fetch)
   console.warn('No API server available, defaulting to production');
+  cachedApiUrl = PROD_API_URL;
   return PROD_API_URL;
 };
 
@@ -60,8 +68,8 @@ export const apiFetch = async (
   endpoint: string,
   options: FetchOptions = {}
 ): Promise<Response> => {
-  const apiUrl = await getApiBaseUrl();
-  const { timeout = 45000, ...fetchOptions } = options; // Default to 45s for cold starts
+  const apiUrl = await initializeApiClient(); // Uses cached URL if available
+  const { timeout = 60000, ...fetchOptions } = options; // Default to 60s for cold starts + processing
   
   const url = `${apiUrl}${endpoint}`;
   
