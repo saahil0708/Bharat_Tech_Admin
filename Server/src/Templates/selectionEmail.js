@@ -11,7 +11,7 @@ const getSelectionEmailHtml = (team) => {
     const leaderPhone = team.leader_phone || '9876543210';
     const teamCode = team.team_code || 'SECRET-CODE';
     const confirmationLink = 'https://bharattech-xperience.theuniques.in/payment';
-    const whatsappLink = 'https://chat.whatsapp.com/EDbu0aetzbaGFsED4p28W8?mode=gi_t';
+    const whatsappLink = 'https://chat.whatsapp.com/GePM6IT1MzT8foOlENFczL?mode=gi_t';
     const portalUrl = 'btxportal.theuniques.in';
 
     // Password generation logic: leadername-last5digits (lowercase, no spaces)

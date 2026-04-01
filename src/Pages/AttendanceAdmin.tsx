@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, IconButton, Tooltip, TextField, InputAdornment, Button, TablePagination } from '@mui/material';
-import { CheckCircle2, XCircle, Search, RefreshCw, Users, FileDown, Hotel } from 'lucide-react';
+import { CheckCircle2, XCircle, Search, RefreshCw, Users, FileDown } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
-import { rooms } from '../data/rooms';
 
 const AttendanceAdmin = () => {
     const [teams, setTeams] = useState<any[]>([]);
@@ -122,54 +121,6 @@ const AttendanceAdmin = () => {
         }
     };
 
-    const handleAssignRooms = async () => {
-        const confirmAssign = window.confirm("Are you sure you want to randomly assign rooms to all present teams? This will overwrite existing assignments.");
-        if (!confirmAssign) return;
-
-        setLoading(true);
-        try {
-            // Fetch ALL present teams, not just the current page
-            const { data: allPresentTeams, error: fetchError } = await supabase
-                .from('teams')
-                .select('*')
-                .eq('is_present', true);
-
-            if (fetchError) throw fetchError;
-            if (!allPresentTeams || allPresentTeams.length === 0) {
-                alert("No present teams found to assign.");
-                return;
-            }
-
-            // Shuffle teams randomly
-            const shuffledTeams = [...allPresentTeams].sort(() => Math.random() - 0.5);
-            
-            let teamIdx = 0;
-            const updates = [];
-
-            for (const room of rooms) {
-                for (let i = 0; i < room.capacity && teamIdx < shuffledTeams.length; i++) {
-                    const team = shuffledTeams[teamIdx++];
-                    updates.push(
-                        supabase.from('teams').update({ room_no: room.name }).eq('id', team.id)
-                    );
-                }
-            }
-
-            if (teamIdx < shuffledTeams.length) {
-                alert(`Warning: Not enough room capacity! Only ${teamIdx} out of ${shuffledTeams.length} teams were assigned rooms.`);
-            }
-
-            await Promise.all(updates);
-            alert(`Successfully assigned rooms to ${teamIdx} teams.`);
-            fetchAttendance();
-        } catch (err: any) {
-            console.error(err);
-            alert("Error assigning rooms: " + err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     // Remove local presentCount calculation as it only reflects current page
 
     return (
@@ -198,16 +149,6 @@ const AttendanceAdmin = () => {
                             >
                                 <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
                             </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Assign Rooms">
-                            <Button
-                                variant="contained"
-                                onClick={handleAssignRooms}
-                                disabled={loading}
-                                sx={{ bgcolor: 'rgba(0,191,255,0.1)', color: '#00bfff', border: '1px solid rgba(0,191,255,0.3)', minWidth: '48px', px: 0, borderRadius: 2, '&:hover': { bgcolor: '#00bfff', color: 'black' } }}
-                            >
-                                <Hotel size={20} />
-                            </Button>
                         </Tooltip>
                         <Tooltip title="Export Report">
                             <Button

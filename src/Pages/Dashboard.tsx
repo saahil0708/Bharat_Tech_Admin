@@ -26,10 +26,12 @@ import {
     Tab,
     Select,
     MenuItem,
-    FormControl
+    FormControl,
+    Divider
 } from '@mui/material';
-import { Users, Database, RefreshCw, Mail, FileText, Eye, X, Search, Edit, Trash2, FileDown } from 'lucide-react';
+import { Users, Database, RefreshCw, Mail, FileText, Eye, X, Search, Edit, Trash2, FileDown, Hotel, MessageCircle, CheckCircle2, Plus, XCircle } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { rooms } from '../data/rooms';
 
 const Dashboard = () => {
     const [loading, setLoading] = useState(true);
@@ -52,6 +54,38 @@ const Dashboard = () => {
     const [processingSelectionId, setProcessingSelectionId] = useState<string | null>(null);
     const [sendingBulkMails, setSendingBulkMails] = useState(false);
     const [bulkEmailType, setBulkEmailType] = useState('selection');
+
+    // WhatsApp Hub
+    const [whatsappHubOpen, setWhatsappHubOpen] = useState(false);
+    const [waSelectedTeams, setWaSelectedTeams] = useState<any[]>([]);
+    const [waSentStatus, setWaSentStatus] = useState<Record<string, boolean>>({});
+    const [waMessageTemplate, setWaMessageTemplate] = useState(
+        `Congratulations {{leader_name}}!\nYour team *{{team_name}}* has been selected for Bharat Tech.\nPlease join our official WhatsApp group for further updates:\nhttps://chat.whatsapp.com/GePM6IT1MzT8foOlENFczL?mode=gi_t`
+    );
+    const [waSearchTerm, setWaSearchTerm] = useState('');
+
+    // Team Member Edit States
+    const [editTeamMembers, setEditTeamMembers] = useState<any[]>([]);
+    const [fetchingMembers, setFetchingMembers] = useState(false);
+    const [initialMembers, setInitialMembers] = useState<any[]>([]); // To track deletions
+
+    const openWhatsappHub = async () => {
+        setRefreshing(true);
+        try {
+            const { data: selectedTeams, error } = await supabase
+                .from('teams')
+                .select('*')
+                .eq('is_selected', true);
+
+            if (error) throw error;
+            setWaSelectedTeams(selectedTeams || []);
+            setWhatsappHubOpen(true);
+        } catch (err: any) {
+            alert("Error fetching teams: " + err.message);
+        } finally {
+            setRefreshing(false);
+        }
+    };
 
     const fetchTeams = async () => {
         setRefreshing(true);
@@ -133,19 +167,68 @@ const Dashboard = () => {
         }
     };
 
-    const openEditModal = (team: any) => {
+    const openEditModal = async (team: any) => {
         setEditTeam(team);
         setEditFormData({ ...team });
+        setFetchingMembers(true);
+        try {
+            const { data, error } = await supabase
+                .from('team_members')
+                .select('*')
+                .eq('team_id', team.id);
+            if (error) throw error;
+            setEditTeamMembers(data || []);
+            setInitialMembers(data || []);
+        } catch (err: any) {
+            console.error("Error fetching members:", err);
+            alert("Could not load team members.");
+        } finally {
+            setFetchingMembers(false);
+        }
+    };
+
+    const handleAddMember = () => {
+        setEditTeamMembers([...editTeamMembers, { name: '', email: '', phone: '' }]);
+    };
+
+    const handleRemoveMember = (index: number) => {
+        const newMembers = [...editTeamMembers];
+        newMembers.splice(index, 1);
+        setEditTeamMembers(newMembers);
+    };
+
+    const handleMemberChange = (index: number, field: string, value: string) => {
+        const newMembers = [...editTeamMembers];
+        newMembers[index] = { ...newMembers[index], [field]: value };
+        setEditTeamMembers(newMembers);
     };
 
     const handleSaveEdit = async () => {
         try {
             const { id, created_at, ...updateData } = editFormData; // Prevent updating readonly fields
-            const { error } = await supabase.from('teams').update(updateData).eq('id', id);
-            if (error) throw error;
+            
+            // 1. Update Team Basic Details
+            const { error: teamError } = await supabase.from('teams').update(updateData).eq('id', id);
+            if (teamError) throw teamError;
+
+            // 2. Synchronize Team Members
+            // Deletions
+            const membersToDelete = initialMembers.filter(initial => !editTeamMembers.find(current => current.id === initial.id));
+            if (membersToDelete.length > 0) {
+                const { error: deleteError } = await supabase.from('team_members').delete().in('id', membersToDelete.map(m => m.id));
+                if (deleteError) throw deleteError;
+            }
+
+            // Updates & Insertions
+            const membersToSync = editTeamMembers.map(m => ({ ...m, team_id: id }));
+            const { error: syncError } = await supabase.from('team_members').upsert(membersToSync);
+            if (syncError) throw syncError;
+
+            alert("Team and members updated successfully!");
             setEditTeam(null);
             fetchTeams();
         } catch (err: any) {
+            console.error("Save Error:", err);
             alert(err.message);
         }
     };
@@ -278,6 +361,77 @@ const Dashboard = () => {
         }
     };
 
+    const handleAssignRooms = async () => {
+        const confirmAssign = window.confirm("Are you sure you want to randomly assign rooms to all selected teams? This will overwrite existing assignments.");
+        if (!confirmAssign) return;
+
+        setRefreshing(true);
+        try {
+            // Fetch ALL selected teams, not just the current page
+            const { data: allSelectedTeams, error: fetchError } = await supabase
+                .from('teams')
+                .select('*')
+                .eq('is_selected', true);
+
+            if (fetchError) throw fetchError;
+            if (!allSelectedTeams || allSelectedTeams.length === 0) {
+                alert("No selected teams found to assign.");
+                return;
+            }
+
+            // Shuffle teams randomly
+            const shuffledTeams = [...allSelectedTeams].sort(() => Math.random() - 0.5);
+            
+            let teamIdx = 0;
+            const updates = [];
+
+            for (const room of rooms) {
+                for (let i = 0; i < room.capacity && teamIdx < shuffledTeams.length; i++) {
+                    const team = shuffledTeams[teamIdx++];
+                    updates.push(
+                        supabase.from('teams').update({ room_no: room.name }).eq('id', team.id)
+                    );
+                }
+            }
+
+            if (teamIdx < shuffledTeams.length) {
+                alert(`Warning: Not enough room capacity! Only ${teamIdx} out of ${shuffledTeams.length} teams were assigned rooms.`);
+            }
+
+            await Promise.all(updates);
+            alert(`Successfully assigned rooms to ${teamIdx} teams.`);
+            fetchTeams();
+        } catch (err: any) {
+            console.error(err);
+            alert("Error assigning rooms: " + err.message);
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
+    const handleClearRooms = async () => {
+        const confirmClear = window.confirm("Are you sure you want to clear room assignments for all selected teams?");
+        if (!confirmClear) return;
+
+        setRefreshing(true);
+        try {
+            const { error } = await supabase
+                .from('teams')
+                .update({ room_no: null })
+                .eq('is_selected', true);
+
+            if (error) throw error;
+            
+            alert("Successfully cleared all room assignments for selected teams.");
+            fetchTeams();
+        } catch (err: any) {
+            console.error(err);
+            alert("Error clearing rooms: " + err.message);
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
     if (loading && teams.length === 0) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
@@ -354,7 +508,67 @@ const Dashboard = () => {
                 <Stack spacing={2} sx={{ width: { xs: '100%', md: 'auto' }, alignItems: { xs: 'stretch', md: 'flex-end' } }}>
                     {/* Bulk Email UI (On Top of Searchbar) */}
                     {currentTab === 2 && (
-                        <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: { xs: 'flex-start', md: 'flex-end' } }}>
+                        <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: { xs: 'flex-start', md: 'flex-end' }, flexWrap: 'wrap' }}>
+                            <Button
+                                variant="contained"
+                                onClick={handleClearRooms}
+                                disabled={refreshing}
+                                sx={{
+                                    borderRadius: 0.5,
+                                    fontFamily: 'Azonix',
+                                    px: 3,
+                                    bgcolor: 'rgba(255,0,0,0.1)',
+                                    color: '#ff0000',
+                                    border: '1px solid rgba(255,0,0,0.5)',
+                                    fontWeight: 800,
+                                    boxShadow: 'none',
+                                    '&:hover': { bgcolor: '#ff0000', color: 'black' },
+                                    '&.Mui-disabled': { bgcolor: 'rgba(255,0,0,0.05)', color: 'rgba(255,0,0,0.2)' }
+                                }}
+                                startIcon={<Trash2 size={18} />}
+                            >
+                                CLEAR ROOMS
+                            </Button>
+                            <Button
+                                variant="contained"
+                                onClick={handleAssignRooms}
+                                disabled={refreshing}
+                                sx={{
+                                    borderRadius: 0.5,
+                                    fontFamily: 'Azonix',
+                                    px: 3,
+                                    bgcolor: 'rgba(0,191,255,0.1)',
+                                    color: '#00bfff',
+                                    border: '1px solid rgba(0,191,255,0.5)',
+                                    fontWeight: 800,
+                                    boxShadow: 'none',
+                                    '&:hover': { bgcolor: '#00bfff', color: 'black' },
+                                    '&.Mui-disabled': { bgcolor: 'rgba(0,191,255,0.05)', color: 'rgba(0,191,255,0.2)' }
+                                }}
+                                startIcon={<Hotel size={18} />}
+                            >
+                                ALLOT ROOMS
+                            </Button>
+                            <Button
+                                variant="contained"
+                                onClick={openWhatsappHub}
+                                disabled={refreshing}
+                                sx={{
+                                    borderRadius: 0.5,
+                                    fontFamily: 'Azonix',
+                                    px: 3,
+                                    bgcolor: 'rgba(37,211,102,0.1)',
+                                    color: '#25D366',
+                                    border: '1px solid rgba(37,211,102,0.5)',
+                                    fontWeight: 800,
+                                    boxShadow: 'none',
+                                    '&:hover': { bgcolor: '#25D366', color: 'black' },
+                                    '&.Mui-disabled': { bgcolor: 'rgba(37,211,102,0.05)', color: 'rgba(37,211,102,0.2)' }
+                                }}
+                                startIcon={<MessageCircle size={18} />}
+                            >
+                                WHATSAPP GROUP
+                            </Button>
                             <FormControl size="small" sx={{
                                 minWidth: 260,
                                 '& .MuiOutlinedInput-root': {
@@ -775,7 +989,7 @@ const Dashboard = () => {
                 <DialogContent sx={{ mt: 2 }}>
                     <Stack spacing={3} sx={{ mt: 1 }}>
                         {allColumns.map(col => {
-                            if (col === 'created_at') return null; // Prevent editing timestamps
+                            if (col === 'created_at' || col === 'id' || col === 'is_selected' || col === 'is_present' || col === 'room_no') return null; // Filter logic
                             return (
                                 <TextField
                                     key={col}
@@ -783,6 +997,7 @@ const Dashboard = () => {
                                     value={editFormData[col] || ''}
                                     onChange={(e) => setEditFormData({ ...editFormData, [col]: e.target.value })}
                                     variant="outlined"
+                                    size="small"
                                     fullWidth
                                     InputLabelProps={{ shrink: true, sx: { color: 'primary.main', fontWeight: 800 } }}
                                     sx={{
@@ -797,6 +1012,80 @@ const Dashboard = () => {
                                 />
                             )
                         })}
+
+                        <Box sx={{ mt: 2 }}>
+                            <Divider sx={{ mb: 2, borderColor: 'rgba(255,255,255,0.1)' }}>
+                                <Typography sx={{ fontFamily: 'Azonix', color: '#00ccff', fontSize: '0.8rem', letterSpacing: 2 }}>
+                                    TEAM MEMBERS
+                                </Typography>
+                            </Divider>
+
+                            {fetchingMembers ? (
+                                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                                    <CircularProgress size={24} sx={{ color: '#00ccff' }} />
+                                </Box>
+                            ) : (
+                                <Stack spacing={2}>
+                                    {editTeamMembers.map((member, idx) => (
+                                        <Box key={idx} sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 1, position: 'relative' }}>
+                                            <IconButton 
+                                                onClick={() => handleRemoveMember(idx)}
+                                                sx={{ position: 'absolute', top: 4, right: 4, color: 'rgba(255,0,0,0.5)', '&:hover': { color: '#ff0000' } }}
+                                                size="small"
+                                            >
+                                                <XCircle size={18} />
+                                            </IconButton>
+                                            <Stack spacing={2}>
+                                                <TextField
+                                                    label="MEMBER NAME"
+                                                    value={member.name || ''}
+                                                    onChange={(e) => handleMemberChange(idx, 'name', e.target.value)}
+                                                    variant="standard"
+                                                    size="small"
+                                                    fullWidth
+                                                    InputLabelProps={{ shrink: true, sx: { color: 'text.secondary', fontSize: '0.7rem' } }}
+                                                />
+                                                <Box sx={{ display: 'flex', gap: 2 }}>
+                                                    <TextField
+                                                        label="EMAIL"
+                                                        value={member.email || ''}
+                                                        onChange={(e) => handleMemberChange(idx, 'email', e.target.value)}
+                                                        variant="standard"
+                                                        size="small"
+                                                        fullWidth
+                                                        InputLabelProps={{ shrink: true, sx: { color: 'text.secondary', fontSize: '0.7rem' } }}
+                                                    />
+                                                    <TextField
+                                                        label="PHONE"
+                                                        value={member.phone || ''}
+                                                        onChange={(e) => handleMemberChange(idx, 'phone', e.target.value)}
+                                                        variant="standard"
+                                                        size="small"
+                                                        fullWidth
+                                                        InputLabelProps={{ shrink: true, sx: { color: 'text.secondary', fontSize: '0.7rem' } }}
+                                                    />
+                                                </Box>
+                                            </Stack>
+                                        </Box>
+                                    ))}
+                                    
+                                    <Button
+                                        variant="outlined"
+                                        startIcon={<Plus size={16} />}
+                                        onClick={handleAddMember}
+                                        fullWidth
+                                        sx={{ 
+                                            borderStyle: 'dashed', 
+                                            color: '#00ccff', 
+                                            borderColor: 'rgba(0,204,255,0.3)',
+                                            '&:hover': { borderStyle: 'dashed', borderColor: '#00ccff', bgcolor: 'rgba(0,204,255,0.05)' }
+                                        }}
+                                    >
+                                        ADD MEMBER
+                                    </Button>
+                                </Stack>
+                            )}
+                        </Box>
                     </Stack>
                 </DialogContent>
                 <DialogActions sx={{ p: 3, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
@@ -804,6 +1093,137 @@ const Dashboard = () => {
                     <Button onClick={handleSaveEdit} variant="contained" sx={{ bgcolor: '#00ccff', color: 'black', fontWeight: 800, borderRadius: 0.5, '&:hover': { bgcolor: '#0099cc' } }}>
                         SAVE CHANGES
                     </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* WhatsApp Hub Modal */}
+            <Dialog 
+                open={whatsappHubOpen} 
+                onClose={() => setWhatsappHubOpen(false)} 
+                maxWidth="md" 
+                fullWidth 
+                PaperProps={{ sx: { bgcolor: '#0a0a0a', border: '1px solid #25D366', borderRadius: 1 } }}
+            >
+                <DialogTitle sx={{ color: 'white', fontWeight: 900, fontFamily: 'Azonix', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    WHATSAPP <span style={{ color: '#25D366' }}>BROADCASTER</span>
+                </DialogTitle>
+                <DialogContent sx={{ p: {xs: 2, md: 3} }}>
+                    <Typography color="text.secondary" mb={3} sx={{ mt: 1 }}>
+                        Native WhatsApp does not allow sending bulk messages to unsaved contacts. Use this rapid-fire list to quickly send the group invite to all selected leaders one by one.
+                    </Typography>
+                    
+                    <Box sx={{ mb: 3, p: 2, bgcolor: 'rgba(37,211,102,0.05)', border: '1px solid rgba(37,211,102,0.2)', borderRadius: 1 }}>
+                        <Typography sx={{ color: '#25D366', fontWeight: 800, mb: 1.5, fontSize: '0.75rem', letterSpacing: 1 }}>EDIT MESSAGE TEMPLATE</Typography>
+                        <TextField
+                            multiline
+                            rows={4}
+                            value={waMessageTemplate}
+                            onChange={(e) => setWaMessageTemplate(e.target.value)}
+                            fullWidth
+                            variant="standard"
+                            placeholder="Type your message here..."
+                            helperText="Use {{leader_name}} and {{team_name}} as placeholders"
+                            FormHelperTextProps={{ sx: { color: 'rgba(255,255,255,0.4)' } }}
+                            sx={{
+                                '& .MuiInputBase-root': {
+                                    color: 'white',
+                                    fontSize: '0.9rem',
+                                    fontFamily: 'inherit',
+                                    lineHeight: 1.5,
+                                    '&:before': { borderColor: 'rgba(37,211,102,0.3)' },
+                                    '&:after': { borderColor: '#25D366' }
+                                }
+                            }}
+                        />
+                    </Box>
+
+                    <Box sx={{ mb: 3, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Typography sx={{ color: 'white', fontWeight: 800, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Users size={14} /> RECIPIENTS ({waSelectedTeams.length})
+                        </Typography>
+                        <TextField
+                            size="small"
+                            placeholder="Search team or leader..."
+                            value={waSearchTerm}
+                            onChange={(e) => setWaSearchTerm(e.target.value)}
+                            sx={{
+                                width: { xs: '100%', md: '250px' },
+                                '& .MuiOutlinedInput-root': {
+                                    bgcolor: 'rgba(255,255,255,0.02)',
+                                    color: 'white',
+                                    borderRadius: 1,
+                                    fontSize: '0.85rem',
+                                    '& fieldset': { borderColor: 'rgba(255,255,255,0.1)' },
+                                    '&:hover fieldset': { borderColor: '#25D366' },
+                                    '&.Mui-focused fieldset': { borderColor: '#25D366' }
+                                }
+                            }}
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <Search size={16} color="rgba(255,255,255,0.5)" />
+                                    </InputAdornment>
+                                ),
+                            }}
+                        />
+                    </Box>
+
+                    <Stack spacing={2} sx={{ maxHeight: '40vh', overflowY: 'auto', pr: 1 }}>
+                        {waSelectedTeams
+                            .filter(team => 
+                                (team.team_name?.toLowerCase() || '').includes(waSearchTerm.toLowerCase()) || 
+                                (team.leader_name?.toLowerCase() || '').includes(waSearchTerm.toLowerCase())
+                            )
+                            .map((team) => {
+                            const isSent = waSentStatus[team.id];
+                            const phoneFixed = team.leader_phone?.replace(/\D/g, '') || '';
+                            const phone = phoneFixed.length === 10 ? '91' + phoneFixed : phoneFixed;
+                            
+                            // Process parameters in template
+                            const personalizedMsg = waMessageTemplate
+                                .replace(/{{leader_name}}/g, team.leader_name || 'Leader')
+                                .replace(/{{team_name}}/g, team.team_name || 'Team');
+                            
+                            const waLink = `https://wa.me/${phone}?text=${encodeURIComponent(personalizedMsg)}`;
+
+                            return (
+                                <Box key={team.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: 'rgba(255,255,255,0.02)', border: isSent ? '1px solid rgba(37,211,102,0.5)' : '1px solid rgba(255,255,255,0.05)', borderRadius: 1 }}>
+                                    <Box>
+                                        <Typography sx={{ color: 'white', fontWeight: 800 }}>{team.team_name || 'Unnamed Team'}</Typography>
+                                        <Typography sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>{team.leader_name} | {team.leader_phone}</Typography>
+                                    </Box>
+                                    <Button
+                                        variant="outlined"
+                                        startIcon={isSent ? <CheckCircle2 size={16} /> : <MessageCircle size={16} />}
+                                        onClick={() => {
+                                            if (!phoneFixed) {
+                                                alert("No valid phone number for this team.");
+                                                return;
+                                            }
+                                            window.open(waLink, '_blank');
+                                            setWaSentStatus(prev => ({ ...prev, [team.id]: true }));
+                                        }}
+                                        sx={{
+                                            fontWeight: 800,
+                                            minWidth: '120px',
+                                            color: isSent ? '#25D366' : 'white',
+                                            borderColor: isSent ? '#25D366' : 'rgba(255,255,255,0.3)',
+                                            bgcolor: isSent ? 'rgba(37,211,102,0.1)' : 'transparent',
+                                            '&:hover': { bgcolor: 'rgba(37,211,102,0.2)', borderColor: '#25D366', color: '#25D366' }
+                                        }}
+                                    >
+                                        {isSent ? 'SENT' : 'SEND WA'}
+                                    </Button>
+                                </Box>
+                            )
+                        })}
+                        {waSelectedTeams.length === 0 && (
+                            <Typography sx={{ textAlign: 'center', p: 3, color: 'text.secondary' }}>No selected teams found to broadcast.</Typography>
+                        )}
+                    </Stack>
+                </DialogContent>
+                <DialogActions sx={{ p: 2, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                    <Button onClick={() => setWhatsappHubOpen(false)} sx={{ color: 'text.secondary', fontWeight: 800 }}>CLOSE</Button>
                 </DialogActions>
             </Dialog>
         </Box>
