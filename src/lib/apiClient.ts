@@ -6,21 +6,7 @@ const PROD_API_URL = import.meta.env.VITE_API_BASE_URL_PROD || 'https://bharat-t
 // Function to get the API base URL with fallback
 export const getApiBaseUrl = async (): Promise<string> => {
   try {
-    // Try local server first (faster for development)
-    const localResponse = await fetch(`${LOCAL_API_URL}/`, { 
-      method: 'GET',
-      signal: AbortSignal.timeout(3000) // 3 second timeout
-    });
-    if (localResponse.ok) {
-      console.log('Using local API server:', LOCAL_API_URL);
-      return LOCAL_API_URL;
-    }
-  } catch (error) {
-    console.log('Local API server not available, trying production...');
-  }
-
-  try {
-    // Fallback to production server
+    // Try production server first as requested
     const prodResponse = await fetch(`${PROD_API_URL}/`, { 
       method: 'GET',
       signal: AbortSignal.timeout(5000) // 5 second timeout
@@ -30,12 +16,26 @@ export const getApiBaseUrl = async (): Promise<string> => {
       return PROD_API_URL;
     }
   } catch (error) {
-    console.log('Production API server not available');
+    console.log('Production API server not available, trying local...');
   }
 
-  // Default to local if both fail (will show error when trying to fetch)
-  console.warn('No API server available, defaulting to local');
-  return LOCAL_API_URL;
+  try {
+    // Fallback to local server
+    const localResponse = await fetch(`${LOCAL_API_URL}/`, { 
+      method: 'GET',
+      signal: AbortSignal.timeout(3000) // 3 second timeout
+    });
+    if (localResponse.ok) {
+      console.log('Using local API server:', LOCAL_API_URL);
+      return LOCAL_API_URL;
+    }
+  } catch (error) {
+    console.log('Local API server not available');
+  }
+
+  // Default to production if both fail (will show error when trying to fetch)
+  console.warn('No API server available, defaulting to production');
+  return PROD_API_URL;
 };
 
 // Cached API URL to avoid repeated availability checks

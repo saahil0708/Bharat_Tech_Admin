@@ -32,6 +32,7 @@ import {
 import { Users, Database, RefreshCw, Mail, FileText, Eye, X, Search, Edit, Trash2, FileDown, Hotel, MessageCircle, CheckCircle2, Plus, XCircle } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { rooms } from '../data/rooms';
+import { apiPost } from '../lib/apiClient';
 
 const Dashboard = () => {
     const [loading, setLoading] = useState(true);
@@ -242,15 +243,11 @@ const Dashboard = () => {
 
             if (newStatus) {
                 try {
-                    const res = await fetch('http://localhost:5000/api/emails/send-selection', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ team })
-                    });
+                    const res = await apiPost('/api/emails/send-selection', { team });
                     if (!res.ok) throw new Error('Failed to send email');
                 } catch (emailErr) {
                     console.error('Email error:', emailErr);
-                    alert(`Team ${team.team_name || team.leader_name} selected but failed to send email. Ensure server is running on port 5000.`);
+                    alert(`Team ${team.team_name || team.leader_name} selected but failed to send email. Check if the server (Render/Local) is reachable.`);
                 }
             }
 
@@ -339,11 +336,7 @@ const Dashboard = () => {
 
             for (const team of selectedTeams) {
                 try {
-                    const res = await fetch('http://localhost:5000/api/emails/send-bulk', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ team, emailType: bulkEmailType })
-                    });
+                    const res = await apiPost('/api/emails/send-bulk', { team, emailType: bulkEmailType });
                     if (!res.ok) throw new Error('Failed');
                     successCount++;
                 } catch (emailErr) {
