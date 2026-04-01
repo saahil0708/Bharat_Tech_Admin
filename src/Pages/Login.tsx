@@ -11,7 +11,7 @@ const Login = () => {
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
         // Hardcoded secure passcode for the admin panel
-        if (passcode === 'Saahil@TU' || passcode === 'cyber2026') {
+        if (passcode === 'Sa@HIL-BTX@TU' || passcode === 'cyber2026') {
             localStorage.setItem('adminAuth', 'true');
             navigate('/admin');
         } else {
