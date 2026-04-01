@@ -6,6 +6,7 @@ import MarkAttendance from "./Pages/MarkAttendance";
 import AttendanceAdmin from "./Pages/AttendanceAdmin";
 import ProtectedLayout from "./Layout/ProtectedLayout";
 import { ThemeProvider, createTheme, CssBaseline } from "@mui/material";
+import { useApiClientInit } from "./lib/useApiClientInit";
 
 const darkTheme = createTheme({
     palette: {
@@ -69,6 +70,9 @@ const router = createBrowserRouter([
 ]);
 
 export default function App() {
+    // Initialize API client to detect available server (localhost or production)
+    useApiClientInit();
+    
     return (
         <ThemeProvider theme={darkTheme}>
             <CssBaseline />
