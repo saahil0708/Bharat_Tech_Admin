@@ -6,8 +6,8 @@ The application now supports automatic fallback between **localhost** (developme
 
 ## Features
 
-✅ **Automatic Server Detection** - Tries production first, falls back to localhost  
-✅ **OR Operator Logic** - Uses `||` operator for fallback support (Prod || Local)  
+✅ **Automatic Server Detection** - Tries localhost first, falls back to production  
+✅ **OR Operator Logic** - Uses `||` operator for fallback support  
 ✅ **Timeout Handling** - Prevents hanging on unavailable servers  
 ✅ **Error Logging** - Detailed console logs for debugging  
 ✅ **Type-Safe** - Full TypeScript support  
@@ -96,15 +96,15 @@ const cachedUrl = getApi();
 ### Server Detection Flow
 
 ```
-1. Try production (https://bharat-tech-admin.onrender.com) → 5 second timeout
-   ├─ Success → Use production
+1. Try localhost (http://localhost:5000) → 3 second timeout
+   ├─ Success → Use localhost
    └─ Timeout/Error → Go to step 2
 
-2. Try localhost (http://localhost:5000) → 3 second timeout
-   ├─ Success → Use localhost
+2. Try production (https://bharat-tech-admin.onrender.com) → 5 second timeout
+   ├─ Success → Use production
    └─ Timeout/Error → Go to step 3
 
-3. Default to production (will show error when making requests)
+3. Default to localhost (will show error when making requests)
 ```
 
 ### OR Operator Pattern
@@ -113,13 +113,13 @@ The API client uses the OR operator (`||`) in the fallback chain:
 
 ```typescript
 // In getApiBaseUrl():
-return PROD_API_URL || LOCAL_API_URL || DEFAULT_URL
+return LOCAL_API_URL || PROD_API_URL || DEFAULT_URL
 ```
 
 This means:
-- ✅ Use production if available (Primary)
-- ✅ Use localhost if production is down (Fallback)
-- ✅ Default to production if both fail (developer can see detailed error)
+- ✅ Use localhost if available
+- ✅ Use production if localhost is down
+- ✅ Default to localhost if both fail (developer can see detailed error)
 
 ## Practical Examples
 
@@ -279,7 +279,7 @@ curl https://bharat-tech-admin.onrender.com
 ### Wrong Server Being Used
 
 - **Issue**: Using production when you want localhost  
-- **Solution**: The system prizes production first. To force localhost, ensure the local server is running on port 5000. If Render is up, it will take priority.
+- **Solution**: Ensure port 5000 is running locally (`npm run dev` in Server/)
 
 ### Stale Cached URL
 
@@ -288,9 +288,9 @@ curl https://bharat-tech-admin.onrender.com
 
 ## Performance Considerations
 
-1. **First Request Delay**: Initial request may take 5 seconds if production server is down (timeout check)
+1. **First Request Delay**: Initial request may take 3-5 seconds if local server is down (timeout check)
 2. **Caching**: API URL is cached after first check, subsequent requests won't retry
-3. **Production Priority**: Render server is always tried before localhost
+3. **Development**: Run both servers locally for instant response times
 
 ## Migration Guide
 

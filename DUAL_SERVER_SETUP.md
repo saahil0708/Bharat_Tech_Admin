@@ -55,32 +55,33 @@ Template for other developers
          │
          ▼
 ┌─────────────────────────────┐
-│ Try Production (Render)      │ ← Check with 5s timeout
-│ (https://bharat-tech...org)  │
-└────────┬─────────────────────┘
+│ Try localhost:5000          │ ← Check with 3s timeout
+│ (http://localhost:5000)     │
+└────────┬────────────────────┘
          │
      ┌───┴───────────────────────────┐
      │                               │
   SUCCESS                          TIMEOUT/ERROR
      │                               │
      ▼                               ▼
-RETURN PROD               ┌─────────────────────────────┐
-                          │ Try localhost:5000          │ ← Check with 3s timeout
-                          │ (http://localhost:5000)     │
-                          └────────┬────────────────────┘
-                                   │
-                               ┌───┴──────────┐
-                               │              │
-                            SUCCESS        TIMEOUT/ERROR
-                               │              │
-                            RETURN LOCAL      ▼
-                                          RETURN PROD
-                                        (show error)
+RETURN LOCAL              ┌─────────────────────────────┐
+                         │ Try Production (Render)      │ ← Check with 5s timeout
+     ┌──────────────────→│ (https://bharat-tech...org)  │
+     │                  └────────┬─────────────────────┘
+     │                           │
+     │                       ┌───┴──────────┐
+     │                       │              │
+     │                    SUCCESS        TIMEOUT/ERROR
+     │                       │              │
+     └───────────────────RETURN PROD        ▼
+                                      RETURN LOCAL
+                                    (show error when
+                                      making requests)
 ```
 
 **In Code:**
 ```typescript
-return PROD_API_URL || LOCAL_API_URL || DEFAULT_URL
+return LOCAL_API_URL || PROD_API_URL || DEFAULT_URL
 ```
 
 ---
@@ -174,10 +175,10 @@ The API client will detect Render server and use it automatically.
 
 | Scenario | Result |
 |----------|--------|
-| Prod up + Local up | Uses **PROD** (Primary) |
-| Prod down + Local up | Uses **LOCAL** |
-| Prod up + Local down | Uses **PROD** |
-| Both down | Uses **PROD** (shows error on API call) |
+| Local up + Prod up | Uses **LOCAL** (faster) |
+| Local down + Prod up | Uses **PROD** |
+| Local up + Prod down | Uses **LOCAL** |
+| Both down | Uses **LOCAL** (shows error on API call) |
 
 ---
 

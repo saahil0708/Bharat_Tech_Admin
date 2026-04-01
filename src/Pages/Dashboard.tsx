@@ -32,7 +32,6 @@ import {
 import { Users, Database, RefreshCw, Mail, FileText, Eye, X, Search, Edit, Trash2, FileDown, Hotel, MessageCircle, CheckCircle2, Plus, XCircle } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { rooms } from '../data/rooms';
-import { apiPost } from '../lib/apiClient';
 
 const Dashboard = () => {
     const [loading, setLoading] = useState(true);
@@ -207,7 +206,7 @@ const Dashboard = () => {
     const handleSaveEdit = async () => {
         try {
             const { id, created_at, ...updateData } = editFormData; // Prevent updating readonly fields
-            
+
             // 1. Update Team Basic Details
             const { error: teamError } = await supabase.from('teams').update(updateData).eq('id', id);
             if (teamError) throw teamError;
@@ -243,11 +242,15 @@ const Dashboard = () => {
 
             if (newStatus) {
                 try {
-                    const res = await apiPost('/api/emails/send-selection', { team });
+                    const res = await fetch('http://localhost:5000/api/emails/send-selection', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ team })
+                    });
                     if (!res.ok) throw new Error('Failed to send email');
                 } catch (emailErr) {
                     console.error('Email error:', emailErr);
-                    alert(`Team ${team.team_name || team.leader_name} selected but failed to send email. Check if the server (Render/Local) is reachable.`);
+                    alert(`Team ${team.team_name || team.leader_name} selected but failed to send email. Ensure server is running on port 5000.`);
                 }
             }
 
@@ -300,7 +303,7 @@ const Dashboard = () => {
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-            
+
             alert(`Export successful! ${allTeams.length} records processed.`);
         } catch (err: any) {
             console.error("Export Error:", err);
@@ -336,7 +339,11 @@ const Dashboard = () => {
 
             for (const team of selectedTeams) {
                 try {
-                    const res = await apiPost('/api/emails/send-bulk', { team, emailType: bulkEmailType });
+                    const res = await fetch('http://localhost:5000/api/emails/send-bulk', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ team, emailType: bulkEmailType })
+                    });
                     if (!res.ok) throw new Error('Failed');
                     successCount++;
                 } catch (emailErr) {
@@ -374,7 +381,7 @@ const Dashboard = () => {
 
             // Shuffle teams randomly
             const shuffledTeams = [...allSelectedTeams].sort(() => Math.random() - 0.5);
-            
+
             let teamIdx = 0;
             const updates = [];
 
@@ -414,7 +421,7 @@ const Dashboard = () => {
                 .eq('is_selected', true);
 
             if (error) throw error;
-            
+
             alert("Successfully cleared all room assignments for selected teams.");
             fetchTeams();
         } catch (err: any) {
@@ -454,34 +461,34 @@ const Dashboard = () => {
                         <Users size={16} /> Viewing registered teams from Supabase
                     </Typography>
                 </Box>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Tooltip title="Refresh Data">
-                            <IconButton
-                                onClick={fetchTeams}
-                                disabled={refreshing}
-                                sx={{
-                                    bgcolor: 'rgba(255,0,0,0.1)',
-                                    color: '#ff0000',
-                                    border: '1px solid rgba(255,0,0,0.2)',
-                                    borderRadius: 2,
-                                    p: 1.5,
-                                    '&:hover': { bgcolor: 'rgba(255,0,0,0.2)' },
-                                    ...(refreshing && { animation: 'spin 1s linear infinite' })
-                                }}
-                                >
-                                <RefreshCw size={20} className={refreshing ? "animate-spin" : ""} />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Export to CSV">
-                            <Button
-                                variant="contained"
-                                onClick={handleExportCSV}
-                                sx={{ bgcolor: '#00ff00', color: 'black', minWidth: '48px', px: 0, borderRadius: 2, '&:hover': { bgcolor: '#00cc00' } }}
-                                >
-                                <FileDown size={20} />
-                            </Button>
-                        </Tooltip>
-                    </Box>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Tooltip title="Refresh Data">
+                        <IconButton
+                            onClick={fetchTeams}
+                            disabled={refreshing}
+                            sx={{
+                                bgcolor: 'rgba(255,0,0,0.1)',
+                                color: '#ff0000',
+                                border: '1px solid rgba(255,0,0,0.2)',
+                                borderRadius: 2,
+                                p: 1.5,
+                                '&:hover': { bgcolor: 'rgba(255,0,0,0.2)' },
+                                ...(refreshing && { animation: 'spin 1s linear infinite' })
+                            }}
+                        >
+                            <RefreshCw size={20} className={refreshing ? "animate-spin" : ""} />
+                        </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Export to CSV">
+                        <Button
+                            variant="contained"
+                            onClick={handleExportCSV}
+                            sx={{ bgcolor: '#00ff00', color: 'black', minWidth: '48px', px: 0, borderRadius: 2, '&:hover': { bgcolor: '#00cc00' } }}
+                        >
+                            <FileDown size={20} />
+                        </Button>
+                    </Tooltip>
+                </Box>
             </Box>
 
             {/* Tabs & Search Bar */}
@@ -736,14 +743,14 @@ const Dashboard = () => {
                                         } else if (typeof val === 'string' && col.includes('at') && val.includes('T')) {
                                             content = new Date(val).toLocaleDateString();
                                         }
-                                        
+
                                         let displayContent: React.ReactNode = content || '-';
                                         if (typeof content === 'string' && content.length > 50) {
                                             displayContent = (
                                                 <>
                                                     {content.substring(0, 50)}
-                                                    <span 
-                                                        style={{ color: '#ff0000', cursor: 'pointer', marginLeft: '4px', fontWeight: 'bold' }} 
+                                                    <span
+                                                        style={{ color: '#ff0000', cursor: 'pointer', marginLeft: '4px', fontWeight: 'bold' }}
                                                         onClick={() => setSelectedTeam(team)}
                                                     >
                                                         see more...
@@ -1021,7 +1028,7 @@ const Dashboard = () => {
                                 <Stack spacing={2}>
                                     {editTeamMembers.map((member, idx) => (
                                         <Box key={idx} sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 1, position: 'relative' }}>
-                                            <IconButton 
+                                            <IconButton
                                                 onClick={() => handleRemoveMember(idx)}
                                                 sx={{ position: 'absolute', top: 4, right: 4, color: 'rgba(255,0,0,0.5)', '&:hover': { color: '#ff0000' } }}
                                                 size="small"
@@ -1061,15 +1068,15 @@ const Dashboard = () => {
                                             </Stack>
                                         </Box>
                                     ))}
-                                    
+
                                     <Button
                                         variant="outlined"
                                         startIcon={<Plus size={16} />}
                                         onClick={handleAddMember}
                                         fullWidth
-                                        sx={{ 
-                                            borderStyle: 'dashed', 
-                                            color: '#00ccff', 
+                                        sx={{
+                                            borderStyle: 'dashed',
+                                            color: '#00ccff',
                                             borderColor: 'rgba(0,204,255,0.3)',
                                             '&:hover': { borderStyle: 'dashed', borderColor: '#00ccff', bgcolor: 'rgba(0,204,255,0.05)' }
                                         }}
@@ -1090,21 +1097,21 @@ const Dashboard = () => {
             </Dialog>
 
             {/* WhatsApp Hub Modal */}
-            <Dialog 
-                open={whatsappHubOpen} 
-                onClose={() => setWhatsappHubOpen(false)} 
-                maxWidth="md" 
-                fullWidth 
+            <Dialog
+                open={whatsappHubOpen}
+                onClose={() => setWhatsappHubOpen(false)}
+                maxWidth="md"
+                fullWidth
                 PaperProps={{ sx: { bgcolor: '#0a0a0a', border: '1px solid #25D366', borderRadius: 1 } }}
             >
                 <DialogTitle sx={{ color: 'white', fontWeight: 900, fontFamily: 'Azonix', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                     WHATSAPP <span style={{ color: '#25D366' }}>BROADCASTER</span>
                 </DialogTitle>
-                <DialogContent sx={{ p: {xs: 2, md: 3} }}>
+                <DialogContent sx={{ p: { xs: 2, md: 3 } }}>
                     <Typography color="text.secondary" mb={3} sx={{ mt: 1 }}>
                         Native WhatsApp does not allow sending bulk messages to unsaved contacts. Use this rapid-fire list to quickly send the group invite to all selected leaders one by one.
                     </Typography>
-                    
+
                     <Box sx={{ mb: 3, p: 2, bgcolor: 'rgba(37,211,102,0.05)', border: '1px solid rgba(37,211,102,0.2)', borderRadius: 1 }}>
                         <Typography sx={{ color: '#25D366', fontWeight: 800, mb: 1.5, fontSize: '0.75rem', letterSpacing: 1 }}>EDIT MESSAGE TEMPLATE</Typography>
                         <TextField
@@ -1163,53 +1170,53 @@ const Dashboard = () => {
 
                     <Stack spacing={2} sx={{ maxHeight: '40vh', overflowY: 'auto', pr: 1 }}>
                         {waSelectedTeams
-                            .filter(team => 
-                                (team.team_name?.toLowerCase() || '').includes(waSearchTerm.toLowerCase()) || 
+                            .filter(team =>
+                                (team.team_name?.toLowerCase() || '').includes(waSearchTerm.toLowerCase()) ||
                                 (team.leader_name?.toLowerCase() || '').includes(waSearchTerm.toLowerCase())
                             )
                             .map((team) => {
-                            const isSent = waSentStatus[team.id];
-                            const phoneFixed = team.leader_phone?.replace(/\D/g, '') || '';
-                            const phone = phoneFixed.length === 10 ? '91' + phoneFixed : phoneFixed;
-                            
-                            // Process parameters in template
-                            const personalizedMsg = waMessageTemplate
-                                .replace(/{{leader_name}}/g, team.leader_name || 'Leader')
-                                .replace(/{{team_name}}/g, team.team_name || 'Team');
-                            
-                            const waLink = `https://wa.me/${phone}?text=${encodeURIComponent(personalizedMsg)}`;
+                                const isSent = waSentStatus[team.id];
+                                const phoneFixed = team.leader_phone?.replace(/\D/g, '') || '';
+                                const phone = phoneFixed.length === 10 ? '91' + phoneFixed : phoneFixed;
 
-                            return (
-                                <Box key={team.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: 'rgba(255,255,255,0.02)', border: isSent ? '1px solid rgba(37,211,102,0.5)' : '1px solid rgba(255,255,255,0.05)', borderRadius: 1 }}>
-                                    <Box>
-                                        <Typography sx={{ color: 'white', fontWeight: 800 }}>{team.team_name || 'Unnamed Team'}</Typography>
-                                        <Typography sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>{team.leader_name} | {team.leader_phone}</Typography>
+                                // Process parameters in template
+                                const personalizedMsg = waMessageTemplate
+                                    .replace(/{{leader_name}}/g, team.leader_name || 'Leader')
+                                    .replace(/{{team_name}}/g, team.team_name || 'Team');
+
+                                const waLink = `https://wa.me/${phone}?text=${encodeURIComponent(personalizedMsg)}`;
+
+                                return (
+                                    <Box key={team.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, bgcolor: 'rgba(255,255,255,0.02)', border: isSent ? '1px solid rgba(37,211,102,0.5)' : '1px solid rgba(255,255,255,0.05)', borderRadius: 1 }}>
+                                        <Box>
+                                            <Typography sx={{ color: 'white', fontWeight: 800 }}>{team.team_name || 'Unnamed Team'}</Typography>
+                                            <Typography sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>{team.leader_name} | {team.leader_phone}</Typography>
+                                        </Box>
+                                        <Button
+                                            variant="outlined"
+                                            startIcon={isSent ? <CheckCircle2 size={16} /> : <MessageCircle size={16} />}
+                                            onClick={() => {
+                                                if (!phoneFixed) {
+                                                    alert("No valid phone number for this team.");
+                                                    return;
+                                                }
+                                                window.open(waLink, '_blank');
+                                                setWaSentStatus(prev => ({ ...prev, [team.id]: true }));
+                                            }}
+                                            sx={{
+                                                fontWeight: 800,
+                                                minWidth: '120px',
+                                                color: isSent ? '#25D366' : 'white',
+                                                borderColor: isSent ? '#25D366' : 'rgba(255,255,255,0.3)',
+                                                bgcolor: isSent ? 'rgba(37,211,102,0.1)' : 'transparent',
+                                                '&:hover': { bgcolor: 'rgba(37,211,102,0.2)', borderColor: '#25D366', color: '#25D366' }
+                                            }}
+                                        >
+                                            {isSent ? 'SENT' : 'SEND WA'}
+                                        </Button>
                                     </Box>
-                                    <Button
-                                        variant="outlined"
-                                        startIcon={isSent ? <CheckCircle2 size={16} /> : <MessageCircle size={16} />}
-                                        onClick={() => {
-                                            if (!phoneFixed) {
-                                                alert("No valid phone number for this team.");
-                                                return;
-                                            }
-                                            window.open(waLink, '_blank');
-                                            setWaSentStatus(prev => ({ ...prev, [team.id]: true }));
-                                        }}
-                                        sx={{
-                                            fontWeight: 800,
-                                            minWidth: '120px',
-                                            color: isSent ? '#25D366' : 'white',
-                                            borderColor: isSent ? '#25D366' : 'rgba(255,255,255,0.3)',
-                                            bgcolor: isSent ? 'rgba(37,211,102,0.1)' : 'transparent',
-                                            '&:hover': { bgcolor: 'rgba(37,211,102,0.2)', borderColor: '#25D366', color: '#25D366' }
-                                        }}
-                                    >
-                                        {isSent ? 'SENT' : 'SEND WA'}
-                                    </Button>
-                                </Box>
-                            )
-                        })}
+                                )
+                            })}
                         {waSelectedTeams.length === 0 && (
                             <Typography sx={{ textAlign: 'center', p: 3, color: 'text.secondary' }}>No selected teams found to broadcast.</Typography>
                         )}
