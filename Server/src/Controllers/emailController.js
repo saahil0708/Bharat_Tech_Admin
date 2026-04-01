@@ -80,17 +80,22 @@ const sendBulkEmail = async (req, res) => {
             case 'room_allotment':
                 subject = 'Bharat Tech - Room Allotment Details';
                 htmlContent = `
-                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-                        <h2 style="color: #00ff00; text-align: center; text-transform: uppercase;">Room Allotment: Team ${team.team_name || 'Leader'}</h2>
-                        <p>Dear ${team.leader_name || 'Participant'},</p>
-                        <p>Your accommodation for the offline round of Bharat Tech has been finalized.</p>
-                        <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                            <p><strong>Details will be verified at the registration desk upon your arrival.</strong></p>
+                    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #ffffff;">
+                        <h2 style="color: #ff0000; text-align: center; text-transform: uppercase; font-size: 24px; margin-bottom: 20px;">Room Allotment: ${team.team_name || 'Your Team'}</h2>
+                        <p>Dear <strong>${team.leader_name || 'Leader'}</strong>,</p>
+                        <p>Your team's attendance for the offline round of Bharat Tech has been marked successfully.</p>
+                        <p>Your designated working space for the event is as follows:</p>
+                        
+                        <div style="background-color: #f8f9fa; padding: 25px; border-radius: 10px; margin: 25px 0; border-left: 5px solid #ff0000;">
+                            <p style="margin: 0; font-size: 16px; color: #333;"><strong>ROOM NUMBER / SPACE:</strong></p>
+                            <p style="margin: 10px 0 0 0; font-size: 32px; color: #ff0000; font-weight: bold;">${team.room_no || 'TBD'}</p>
                         </div>
-                        <p>If you have any specific queries regarding accommodation, please reach out to the organizing team.</p>
+
+                        <p>Please proceed to your allotted room to set up your workspace. Our volunteers will be available at each block to assist you.</p>
+                        <p style="color: #666; font-size: 0.9em;">If you have any specific queries regarding accommodation or workspace, please reach out to the registration desk.</p>
                         <br/>
-                        <p>Best Regards,</p>
-                        <p><strong>Bharat Tech Organizing Team</strong></p>
+                        <p style="margin-bottom: 5px;">Best Regards,</p>
+                        <p style="margin-top: 0;"><strong>Bharat Tech Organizing Team</strong></p>
                     </div>
                 `;
                 break;

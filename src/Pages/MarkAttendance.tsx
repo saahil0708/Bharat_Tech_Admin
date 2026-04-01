@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Box, Typography, TextField, Button, Paper, CircularProgress } from '@mui/material';
 import { QrCode, CheckCircle2, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { rooms } from '../data/rooms';
+import { apiPost } from '../lib/apiClient';
 
 const MarkAttendance = () => {
     const navigate = useNavigate();
@@ -31,36 +33,82 @@ const MarkAttendance = () => {
 
         try {
             // Query Supabase for the team matching the unique code
-            const { data, error: fetchError } = await supabase
+            const { data: team, error: fetchError } = await supabase
                 .from('teams')
                 .select('*')
                 .eq('team_code', code.trim())
                 .single();
 
-            if (fetchError || !data) {
+            if (fetchError || !team) {
                 setStatus('error');
                 setMessage('INVALID SECURITY CODE. TEAM NOT FOUND IN SYSTEM.');
                 return;
             }
 
-            const displayName = data.team_name ? data.team_name.toUpperCase() : 'TEAM';
+            const displayName = team.team_name ? team.team_name.toUpperCase() : 'TEAM';
 
-            if (data.is_present) {
+            if (team.is_present) {
                 setStatus('success');
-                setMessage(`WELCOME BACK, ${displayName}! YOU ARE ALREADY MARKED PRESENT.`);
+                setMessage(`WELCOME BACK, ${displayName}! YOU ARE ALREADY MARKED PRESENT AND ALLOTTED ROOM: ${team.room_no || 'TBD'}.`);
                 return;
             }
 
-            // Mark as present
+            // AUTO ROOM ALLOTMENT LOGIC
+            // 1. Get current occupancy of all rooms
+            const { data: occupancyData, error: occupancyError } = await supabase
+                .from('teams')
+                .select('room_no')
+                .not('room_no', 'is', null);
+
+            if (occupancyError) throw occupancyError;
+
+            const occupancyMap: Record<string, number> = {};
+            occupancyData?.forEach((t: any) => {
+                if (t.room_no) {
+                    occupancyMap[t.room_no] = (occupancyMap[t.room_no] || 0) + 1;
+                }
+            });
+
+            // 2. Find first room with available capacity
+            let selectedRoom = "TBD";
+            for (const room of rooms) {
+                const currentCount = occupancyMap[room.name] || 0;
+                if (currentCount < room.capacity) {
+                    selectedRoom = room.name;
+                    break;
+                }
+            }
+
+            if (selectedRoom === "TBD") {
+                console.warn("ALL ROOMS ARE FULL!");
+            }
+
+            // Mark as present and allot room
             const { error: updateError } = await supabase
                 .from('teams')
-                .update({ is_present: true })
-                .eq('id', data.id);
+                .update({ 
+                    is_present: true,
+                    room_no: selectedRoom
+                })
+                .eq('id', team.id);
 
             if (updateError) throw updateError;
 
+            // Trigger Email Notification
+            try {
+                const updatedTeam = { ...team, is_present: true, room_no: selectedRoom };
+                await apiPost('/api/emails/send-bulk', { 
+                    team: updatedTeam, 
+                    emailType: 'room_allotment' 
+                });
+                console.log(`Notification email sent to ${updatedTeam.team_name}`);
+            } catch (emailErr) {
+                console.error("Failed to send notification email:", emailErr);
+                // We don't fail the whole process if email fails, but we log it
+            }
+
             setStatus('success');
-            setMessage(`ATTENDANCE VERIFIED! WELCOME, ${displayName}.`);
+            setMessage(`ATTENDANCE VERIFIED! WELCOME, ${displayName}. YOUR ALLOTTED ROOM IS: ${selectedRoom}`);
 
         } catch (err: any) {
             console.error(err);
