@@ -71,9 +71,28 @@ const MarkAttendance = () => {
                 }
             });
 
-            // 2. Find first room with available capacity
+            // 2. Find first room with available capacity based on institution
             let selectedRoom = "TBD";
-            for (const room of rooms) {
+
+            // Identification Keywords for Priority Institutions
+            const instNormalized = (team.institution_name || "").toLowerCase();
+            const priorityKeywords = [
+                'iit', 'indian institute of technology',
+                'nit', 'national institute of technology',
+                'iiit', 'indian institute of information technology',
+                'nsut', 'nsit', 'netaji subhas university',
+                'thapar',
+                'lpu', 'lovely professional university'
+            ];
+
+            const isPriority = priorityKeywords.some(keyword => instNormalized.includes(keyword));
+            
+            // Filter rooms strictly based on institution type
+            const targetRooms = isPriority 
+                ? rooms.filter(r => r.block === "Block C") 
+                : rooms.filter(r => r.block !== "Block C");
+
+            for (const room of targetRooms) {
                 const currentCount = occupancyMap[room.name] || 0;
                 if (currentCount < room.capacity) {
                     selectedRoom = room.name;
@@ -82,13 +101,17 @@ const MarkAttendance = () => {
             }
 
             if (selectedRoom === "TBD") {
-                console.warn("ALL ROOMS ARE FULL!");
+                const blockMsg = isPriority ? "BLOCK C (Reserved for Priority Colleges)" : "STANDARD BLOCKS";
+                console.warn(`ALL ROOMS IN ${blockMsg} ARE FULL!`);
+                setStatus('error');
+                setMessage(`ALL ROOMS IN ${blockMsg} ARE FULL. PLEASE CONTACT THE ADMIN DESK FOR MANUAL ALLOCATION.`);
+                return;
             }
 
             // Mark as present and allot room
             const { error: updateError } = await supabase
                 .from('teams')
-                .update({ 
+                .update({
                     is_present: true,
                     room_no: selectedRoom
                 })
@@ -99,9 +122,9 @@ const MarkAttendance = () => {
             // Trigger Email Notification
             try {
                 const updatedTeam = { ...team, is_present: true, room_no: selectedRoom };
-                await apiPost('/api/emails/send-bulk', { 
-                    team: updatedTeam, 
-                    emailType: 'room_allotment' 
+                await apiPost('/api/emails/send-bulk', {
+                    team: updatedTeam,
+                    emailType: 'room_allotment'
                 });
                 console.log(`Notification email sent to ${updatedTeam.team_name}`);
             } catch (emailErr) {
