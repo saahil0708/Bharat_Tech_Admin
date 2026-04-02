@@ -72,8 +72,13 @@ const Dashboard = () => {
     // Judging Panel States
     const [mentors, setMentors] = useState<any[]>([]); // We keep "mentors" as the variable name for compatibility
     const [mentorModalOpen, setMentorModalOpen] = useState(false);
-    const [mentorForm, setMentorForm] = useState({ member1: '', member2: '', email: '', assigned_rooms: [] as string[] });
-    const [editingMentorId, setEditingMentorId] = useState<string | null>(null);
+    const [mentorForm, setMentorForm] = useState({ 
+        panelNo: 1,
+        m1: { name: '', email: '', phone: '' },
+        m2: { name: '', email: '', phone: '' },
+        assigned_rooms: [] as string[] 
+    });
+    const [editingPanelNo, setEditingPanelNo] = useState<number | null>(null);
 
     const openWhatsappHub = async () => {
         setRefreshing(true);
@@ -476,42 +481,70 @@ const Dashboard = () => {
     };
 
     const handleSaveMentor = async () => {
-        if (!mentorForm.member1 && !mentorForm.member2) {
-            alert("Panel members are required");
+        if (!mentorForm.m1.name || !mentorForm.m2.name) {
+            alert("Both panel members are required");
             return;
         }
+        if (mentorForm.m1.phone.length < 5 || mentorForm.m2.phone.length < 5) {
+            alert("Phone numbers must be at least 5 digits for password generation");
+            return;
+        }
+
         setRefreshing(true);
         try {
-            // Store both members in the "name" column as "Member 1 | Member 2"
-            const panelName = `${mentorForm.member1 || '-'} | ${mentorForm.member2 || '-'}`;
-            
-            // Map the array of rooms to a comma-separated string for the existing "room_no" column
             const joinedRooms = mentorForm.assigned_rooms.join(', ');
+            const panelLabel = `Panel ${mentorForm.panelNo}`;
 
-            const finalData = { 
-                name: panelName,
-                email: mentorForm.email,
+            // Generate Member 1 Record
+            const m1Data = {
+                name: `${panelLabel} | ${mentorForm.m1.name}`,
+                email: mentorForm.m1.email,
+                phone: mentorForm.m1.phone,
                 room_no: joinedRooms,
-                // phone is not needed as per user request
+                username: mentorForm.m1.email,
+                password: `${mentorForm.m1.name}-${mentorForm.m1.phone.slice(-5)}`.toLowerCase()
             };
 
-            if (editingMentorId) {
-                const { error } = await supabase
-                    .from('mentors')
-                    .update(finalData)
-                    .eq('id', editingMentorId);
-                if (error) throw error;
-                alert("Judging Panel updated!");
-            } else {
-                const { error } = await supabase
-                    .from('mentors')
-                    .insert([finalData]);
-                if (error) throw error;
-                alert("Judging Panel added!");
+            // Generate Member 2 Record
+            const m2Data = {
+                name: `${panelLabel} | ${mentorForm.m2.name}`,
+                email: mentorForm.m2.email,
+                phone: mentorForm.m2.phone,
+                room_no: joinedRooms,
+                username: mentorForm.m2.email,
+                password: `${mentorForm.m2.name}-${mentorForm.m2.phone.slice(-5)}`.toLowerCase()
+            };
+
+            if (editingPanelNo !== null) {
+                // To update, we find both records that started with "Panel N |"
+                // First, find IDs of existing panel members
+                const oldLabel = `Panel ${editingPanelNo}`;
+                const { data: existing } = await supabase.from('mentors').select('id, name').ilike('name', `${oldLabel}%`);
+                
+                if (existing && existing.length > 0) {
+                    // Update sequentially or in parallel
+                    // For simplicity, we just delete and re-insert if IDs are complex, 
+                    // but better to update by ID if matched. 
+                    // Let's just delete the old ones and insert new ones to avoid mismatching Bob and Alice IDs
+                    await supabase.from('mentors').delete().ilike('name', `${oldLabel}%`);
+                }
             }
+
+            const { error } = await supabase.from('mentors').insert([m1Data, m2Data]);
+            if (error) throw error;
+
+            alert(`Judging ${panelLabel} saved successfully!`);
             setMentorModalOpen(false);
-            setMentorForm({ member1: '', member2: '', email: '', assigned_rooms: [] });
-            setEditingMentorId(null);
+            
+            // Auto-increment panel number for next one
+            const nextNo = editingPanelNo !== null ? mentorForm.panelNo : mentorForm.panelNo + 1;
+            setMentorForm({ 
+                panelNo: nextNo, 
+                m1: { name: '', email: '', phone: '' }, 
+                m2: { name: '', email: '', phone: '' }, 
+                assigned_rooms: [] 
+            });
+            setEditingPanelNo(null);
             fetchMentors();
         } catch (err: any) {
             alert(err.message);
@@ -520,11 +553,12 @@ const Dashboard = () => {
         }
     };
 
-    const handleDeleteMentorById = async (id: string) => {
-        if (!window.confirm("Are you sure you want to delete this panel?")) return;
+    const handleDeletePanel = async (panelNo: number) => {
+        if (!window.confirm(`Are you sure you want to delete Panel ${panelNo}? Both members will be removed.`)) return;
         setRefreshing(true);
         try {
-            const { error } = await supabase.from('mentors').delete().eq('id', id);
+            const label = `Panel ${panelNo}`;
+            const { error } = await supabase.from('mentors').delete().ilike('name', `${label}%`);
             if (error) throw error;
             fetchMentors();
         } catch (err: any) {
@@ -969,13 +1003,26 @@ const Dashboard = () => {
             {/* Judging Panels Tab Content (Tab 3) */}
             {currentTab === 3 && (
                 <Box>
-                    <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+                    <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                         <Typography sx={{ color: 'text.secondary', fontSize: '0.8rem', letterSpacing: 1 }}>
+                            Each member judges the same rooms but has their own unique login.
+                        </Typography>
                         <Button
                             variant="contained"
                             startIcon={<Plus size={18} />}
                             onClick={() => {
-                                setEditingMentorId(null);
-                                setMentorForm({ member1: '', member2: '', email: '', assigned_rooms: [] });
+                                setEditingPanelNo(null);
+                                // Determine next panel number based on existing count
+                                const maxPanel = mentors.reduce((max, m) => {
+                                    const match = m.name?.match(/Panel (\d+)/i);
+                                    return match ? Math.max(max, parseInt(match[1])) : max;
+                                }, 0);
+                                setMentorForm({ 
+                                    panelNo: maxPanel + 1, 
+                                    m1: { name: '', email: '', phone: '' }, 
+                                    m2: { name: '', email: '', phone: '' }, 
+                                    assigned_rooms: [] 
+                                });
                                 setMentorModalOpen(true);
                             }}
                             sx={{ bgcolor: '#00ff00', color: 'black', fontWeight: 800, fontFamily: 'Azonix', '&:hover': { bgcolor: '#00cc00' } }}
@@ -987,141 +1034,202 @@ const Dashboard = () => {
                         <Table sx={{ minWidth: 650 }}>
                             <TableHead>
                                 <TableRow sx={{ bgcolor: 'rgba(255,0,0,0.05)' }}>
-                                    <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>PANEL MEMBERS</TableCell>
-                                    <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>CONTACT EMAIL</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>IDENTITY</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>MEMBER 1 LOGIN</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>MEMBER 2 LOGIN</TableCell>
                                     <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>ASSIGNED ROOMS</TableCell>
                                     <TableCell sx={{ fontWeight: 800, color: 'primary.main', textAlign: 'right', fontFamily: 'Azonix' }}>ACTIONS</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {mentors.map((panel) => {
-                                    const names = panel.name?.split(' | ') || ['Unknown', 'Unknown'];
-                                    const assignedRooms = panel.room_no?.split(', ').filter(Boolean) || [];
-                                    return (
-                                        <TableRow key={panel.id} sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' } }}>
-                                            <TableCell>
-                                                <Stack spacing={0.5}>
-                                                    <Typography sx={{ fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                        <Users size={14} color="#00ff00" /> {names[0]}
+                                {(() => {
+                                    // Group mentors by Panel Number extracted from name prefix
+                                    const grouped: Record<number, any[]> = {};
+                                    mentors.forEach(m => {
+                                        const match = m.name?.match(/Panel (\d+)/i);
+                                        const pNo = match ? parseInt(match[1]) : 999;
+                                        if (!grouped[pNo]) grouped[pNo] = [];
+                                        grouped[pNo].push(m);
+                                    });
+
+                                    return Object.keys(grouped).sort((a, b) => parseInt(a) - parseInt(b)).map(pNoKey => {
+                                        const pNo = parseInt(pNoKey);
+                                        const members = grouped[pNo];
+                                        const m1 = members[0];
+                                        const m2 = members[1] || { name: 'N/A', username: '-', password: '-', room_no: m1.room_no };
+                                        const assignedRooms = m1.room_no?.split(', ').filter(Boolean) || [];
+                                        
+                                        return (
+                                            <TableRow key={pNo} sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' } }}>
+                                                <TableCell>
+                                                    <Typography sx={{ fontWeight: 900, color: '#00ff00', fontFamily: 'Azonix', fontSize: '1.1rem' }}>
+                                                        PANEL {pNo}
                                                     </Typography>
-                                                    <Typography sx={{ fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                        <Users size={14} color="#00ff00" /> {names[1]}
-                                                    </Typography>
-                                                </Stack>
-                                            </TableCell>
-                                            <TableCell sx={{ color: 'text.secondary' }}>{panel.email || '-'}</TableCell>
-                                            <TableCell>
-                                                <Stack direction="row" spacing={0.5} flexWrap="wrap" gap={0.5}>
-                                                    {assignedRooms.length > 0 ? (
-                                                        assignedRooms.map((roomName: string) => (
-                                                            <Chip 
-                                                                key={roomName}
-                                                                label={roomName}
-                                                                size="small"
-                                                                sx={{ bgcolor: 'rgba(0,255,0,0.1)', color: '#00ff00', border: '1px solid rgba(0,255,0,0.2)', fontSize: '0.7rem' }}
-                                                            />
-                                                        ))
-                                                    ) : (
-                                                        <Typography variant="caption" color="text.disabled">No rooms assigned</Typography>
-                                                    )}
-                                                </Stack>
-                                            </TableCell>
-                                            <TableCell sx={{ textAlign: 'right' }}>
-                                                <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                    <IconButton 
-                                                        size="small" 
-                                                        onClick={() => {
-                                                            setEditingMentorId(panel.id);
-                                                            const existingNames = panel.name?.split(' | ') || ['', ''];
-                                                            setMentorForm({ 
-                                                                member1: existingNames[0] || '', 
-                                                                member2: existingNames[1] || '', 
-                                                                email: panel.email || '', 
-                                                                assigned_rooms: assignedRooms 
-                                                            });
-                                                            setMentorModalOpen(true);
-                                                        }}
-                                                        sx={{ color: '#00bfff', '&:hover': { bgcolor: 'rgba(0,191,255,0.1)' } }}
-                                                    >
-                                                        <Edit size={18} />
-                                                    </IconButton>
-                                                    <IconButton 
-                                                        size="small" 
-                                                        onClick={() => handleDeleteMentorById(panel.id)}
-                                                        sx={{ color: '#ff0000', '&:hover': { bgcolor: 'rgba(255,0,0,0.1)' } }}
-                                                    >
-                                                        <Trash2 size={18} />
-                                                    </IconButton>
-                                                </Stack>
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Stack spacing={0.5}>
+                                                        <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800 }}>{m1.name.split(' | ')[1]}</Typography>
+                                                        <Typography sx={{ color: 'white', fontWeight: 700, fontSize: '0.8rem' }}>U: {m1.username}</Typography>
+                                                        <Typography sx={{ color: 'primary.main', fontWeight: 700, fontSize: '0.8rem' }}>P: {m1.password}</Typography>
+                                                    </Stack>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Stack spacing={0.5}>
+                                                        <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800 }}>{m2.name.split(' | ')[1]}</Typography>
+                                                        <Typography sx={{ color: 'white', fontWeight: 700, fontSize: '0.8rem' }}>U: {m2.username}</Typography>
+                                                        <Typography sx={{ color: 'primary.main', fontWeight: 700, fontSize: '0.8rem' }}>P: {m2.password}</Typography>
+                                                    </Stack>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Stack direction="row" spacing={0.5} flexWrap="wrap" gap={0.5}>
+                                                        {assignedRooms.map((roomName: string) => {
+                                                            const roomInfo = rooms.find(r => r.name === roomName);
+                                                            return (
+                                                                <Tooltip key={roomName} title={roomInfo ? `${roomInfo.venue} (${roomInfo.block}) - ${roomInfo.students} Students` : 'Room'}>
+                                                                    <Chip label={roomName} size="small" sx={{ bgcolor: 'rgba(0,255,0,0.1)', color: '#00ff00', border: '1px solid rgba(0,255,0,0.2)', fontSize: '0.7rem' }} />
+                                                                </Tooltip>
+                                                            );
+                                                        })}
+                                                    </Stack>
+                                                </TableCell>
+                                                <TableCell sx={{ textAlign: 'right' }}>
+                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                        <IconButton 
+                                                            size="small" 
+                                                            onClick={() => {
+                                                                setEditingPanelNo(pNo);
+                                                                setMentorForm({ 
+                                                                    panelNo: pNo, 
+                                                                    m1: { name: m1.name.split(' | ')[1] || '', email: m1.email || '', phone: m1.phone || '' }, 
+                                                                    m2: { name: m2.name.split(' | ')[1] || '', email: m2.email || '', phone: m2.phone || '' }, 
+                                                                    assigned_rooms: assignedRooms 
+                                                                });
+                                                                setMentorModalOpen(true);
+                                                            }}
+                                                            sx={{ color: '#00bfff', '&:hover': { bgcolor: 'rgba(0,191,255,0.1)' } }}
+                                                        >
+                                                            <Edit size={18} />
+                                                        </IconButton>
+                                                        <IconButton 
+                                                            size="small" 
+                                                            onClick={() => handleDeletePanel(pNo)}
+                                                            sx={{ color: '#ff0000', '&:hover': { bgcolor: 'rgba(255,0,0,0.1)' } }}
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </IconButton>
+                                                    </Stack>
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    });
+                                })()}
                             </TableBody>
                         </Table>
                     </TableContainer>
 
-                    {/* Panel Add/Edit Dialog */}
-                    <Dialog open={mentorModalOpen} onClose={() => setMentorModalOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { bgcolor: '#0a0a0a', border: '1px solid rgba(255,0,0,0.2)', borderRadius: 2 } }}>
-                        <DialogTitle sx={{ fontFamily: 'Azonix', color: '#ff0000', borderBottom: '1px solid rgba(255,0,0,0.1)', mb: 2 }}>
-                            {editingMentorId ? 'EDIT PANEL' : 'CREATE NEW PANEL'}
-                        </DialogTitle>
-                        <DialogContent>
-                            <Stack spacing={3} sx={{ mt: 1 }}>
-                                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                                    <TextField
-                                        label="Member 1 Name"
-                                        value={mentorForm.member1}
-                                        onChange={(e) => setMentorForm({ ...mentorForm, member1: e.target.value })}
-                                        variant="outlined"
-                                        size="small"
-                                        sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'rgba(255,255,255,0.02)' } }}
-                                    />
-                                    <TextField
-                                        label="Member 2 Name"
-                                        value={mentorForm.member2}
-                                        onChange={(e) => setMentorForm({ ...mentorForm, member2: e.target.value })}
-                                        variant="outlined"
-                                        size="small"
-                                        sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'rgba(255,255,255,0.02)' } }}
-                                    />
-                                </Box>
+                    {/* Manage Panel Dialog */}
+                    <Dialog 
+                        open={mentorModalOpen} 
+                        onClose={() => setMentorModalOpen(false)} 
+                        maxWidth="md" 
+                        fullWidth
+                        PaperProps={{ sx: { bgcolor: '#0a0a0a', border: '1px solid #ff0000', borderRadius: 1 } }}
+                    >
+                        <DialogTitle sx={{ bgcolor: 'rgba(255,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Typography variant="h5" sx={{ fontFamily: 'Azonix', fontWeight: 900, color: 'white' }}>
+                                {editingPanelNo ? `EDIT PANEL ${editingPanelNo}` : `CREATE NEW PANEL`}
+                            </Typography>
+                            {!editingPanelNo && (
                                 <TextField
-                                    fullWidth
-                                    label="Panel Lead Email"
-                                    value={mentorForm.email}
-                                    onChange={(e) => setMentorForm({ ...mentorForm, email: e.target.value })}
-                                    variant="outlined"
-                                    size="small"
-                                    sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'rgba(255,255,255,0.02)' } }}
+                                    label="PANEL #"
+                                    type="number"
+                                    value={mentorForm.panelNo}
+                                    onChange={(e) => setMentorForm({ ...mentorForm, panelNo: parseInt(e.target.value) })}
+                                    sx={{ width: 100, '& .MuiOutlinedInput-root': { color: '#00ff00', fontWeight: 900 } }}
+                                    variant="standard"
                                 />
+                            )}
+                        </DialogTitle>
+                        <DialogContent sx={{ mt: 3 }}>
+                            <Stack spacing={4}>
+                                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                                    {/* Member 1 */}
+                                    <Box sx={{ p: 2, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 2, bgcolor: 'rgba(255,255,255,0.02)' }}>
+                                        <Typography sx={{ color: 'primary.main', fontWeight: 800, mb: 2, fontSize: '0.8rem' }}>MEMBER 1 (LEAD)</Typography>
+                                        <Stack spacing={2}>
+                                            <TextField 
+                                                fullWidth label="Full Name" size="small"
+                                                value={mentorForm.m1.name}
+                                                onChange={(e) => setMentorForm({ ...mentorForm, m1: { ...mentorForm.m1, name: e.target.value } })}
+                                            />
+                                            <TextField 
+                                                fullWidth label="Email (Login ID)" size="small"
+                                                value={mentorForm.m1.email}
+                                                onChange={(e) => setMentorForm({ ...mentorForm, m1: { ...mentorForm.m1, email: e.target.value } })}
+                                            />
+                                            <TextField 
+                                                fullWidth label="Mobile Number" size="small" placeholder="Last 5 digits used for password"
+                                                value={mentorForm.m1.phone}
+                                                onChange={(e) => setMentorForm({ ...mentorForm, m1: { ...mentorForm.m1, phone: e.target.value } })}
+                                            />
+                                        </Stack>
+                                    </Box>
+
+                                    {/* Member 2 */}
+                                    <Box sx={{ p: 2, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 2, bgcolor: 'rgba(255,255,255,0.02)' }}>
+                                        <Typography sx={{ color: 'primary.main', fontWeight: 800, mb: 2, fontSize: '0.8rem' }}>MEMBER 2</Typography>
+                                        <Stack spacing={2}>
+                                            <TextField 
+                                                fullWidth label="Full Name" size="small"
+                                                value={mentorForm.m2.name}
+                                                onChange={(e) => setMentorForm({ ...mentorForm, m2: { ...mentorForm.m2, name: e.target.value } })}
+                                            />
+                                            <TextField 
+                                                fullWidth label="Email (Login ID)" size="small"
+                                                value={mentorForm.m2.email}
+                                                onChange={(e) => setMentorForm({ ...mentorForm, m2: { ...mentorForm.m2, email: e.target.value } })}
+                                            />
+                                            <TextField 
+                                                fullWidth label="Mobile Number" size="small" placeholder="Last 5 digits used for password"
+                                                value={mentorForm.m2.phone}
+                                                onChange={(e) => setMentorForm({ ...mentorForm, m2: { ...mentorForm.m2, phone: e.target.value } })}
+                                            />
+                                        </Stack>
+                                    </Box>
+                                </Box>
+
                                 <Box>
-                                    <Typography variant="overline" sx={{ color: '#ff0000', fontWeight: 800, mb: 1, display: 'block' }}>ASSIGN ROOMS</Typography>
-                                    <Box sx={{ maxHeight: 200, overflowY: 'auto', p: 1, border: '1px solid rgba(255,255,255,0.05)', borderRadius: 1, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
+                                    <Typography sx={{ fontWeight: 800, mb: 1, color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Hotel size={18} color="#00ff00" /> ALLOT ROOMS TO PANEL
+                                    </Typography>
+                                    <Box sx={{ maxHeight: 200, overflowY: 'auto', p: 1, border: '1px solid rgba(255,255,255,0.05)', borderRadius: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1 }}>
                                         {rooms.map((room) => {
                                             const isSelected = mentorForm.assigned_rooms.includes(room.name);
                                             return (
-                                                <Button
-                                                    key={room.name}
-                                                    size="small"
-                                                    variant="outlined"
-                                                    onClick={() => {
-                                                        const newRooms = isSelected
-                                                            ? mentorForm.assigned_rooms.filter(r => r !== room.name)
-                                                            : [...mentorForm.assigned_rooms, room.name];
-                                                        setMentorForm({ ...mentorForm, assigned_rooms: newRooms });
-                                                    }}
-                                                    sx={{
-                                                        fontSize: '0.7rem',
-                                                        fontWeight: 800,
-                                                        borderColor: isSelected ? '#00ff00' : 'rgba(255,255,255,0.1)',
-                                                        bgcolor: isSelected ? 'rgba(0,255,0,0.1)' : 'transparent',
-                                                        color: isSelected ? '#00ff00' : 'text.secondary',
-                                                        '&:hover': { bgcolor: isSelected ? 'rgba(0,255,0,0.2)' : 'rgba(255,255,255,0.05)', borderColor: isSelected ? '#00ff00' : 'rgba(255,255,255,0.3)' }
-                                                    }}
-                                                >
-                                                    {room.name}
-                                                </Button>
+                                                <Tooltip key={room.name} title={`${room.venue} | ${room.block} | ${room.students} Students`}>
+                                                    <Button
+                                                        size="small" variant="outlined"
+                                                        onClick={() => {
+                                                            const newRooms = isSelected
+                                                                ? mentorForm.assigned_rooms.filter(r => r !== room.name)
+                                                                : [...mentorForm.assigned_rooms, room.name];
+                                                            setMentorForm({ ...mentorForm, assigned_rooms: newRooms });
+                                                        }}
+                                                        sx={{
+                                                            fontSize: '0.7rem', fontWeight: 800,
+                                                            borderColor: isSelected ? '#00ff00' : 'rgba(255,255,255,0.1)',
+                                                            bgcolor: isSelected ? 'rgba(0,255,0,0.1)' : 'transparent',
+                                                            color: isSelected ? '#00ff00' : 'text.secondary',
+                                                            minHeight: 45,
+                                                            '&:hover': { bgcolor: isSelected ? 'rgba(0,255,0,0.2)' : 'rgba(255,255,255,0.05)' }
+                                                        }}
+                                                    >
+                                                        <Box sx={{ display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
+                                                            <Typography variant="caption" sx={{ fontWeight: 900, lineHeight: 1 }}>{room.name}</Typography>
+                                                            <Typography variant="caption" sx={{ fontSize: '0.55rem', opacity: 0.6, mt: 0.5 }}>{room.block.replace('Block ', '')}</Typography>
+                                                        </Box>
+                                                    </Button>
+                                                </Tooltip>
                                             );
                                         })}
                                     </Box>
@@ -1130,11 +1238,7 @@ const Dashboard = () => {
                         </DialogContent>
                         <DialogActions sx={{ p: 3, borderTop: '1px solid rgba(255,0,0,0.1)' }}>
                             <Button onClick={() => setMentorModalOpen(false)} sx={{ color: 'text.secondary', fontWeight: 800 }}>CANCEL</Button>
-                            <Button 
-                                onClick={handleSaveMentor} 
-                                variant="contained" 
-                                sx={{ bgcolor: '#ff0000', color: 'white', fontWeight: 800, px: 4, '&:hover': { bgcolor: '#cc0000' } }}
-                            >
+                            <Button onClick={handleSaveMentor} variant="contained" sx={{ bgcolor: '#ff0000', color: 'white', fontWeight: 800, px: 4, '&:hover': { bgcolor: '#cc0000' } }}>
                                 SAVE PANEL
                             </Button>
                         </DialogActions>

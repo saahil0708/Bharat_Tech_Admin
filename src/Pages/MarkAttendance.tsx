@@ -48,8 +48,10 @@ const MarkAttendance = () => {
             const displayName = team.team_name ? team.team_name.toUpperCase() : 'TEAM';
 
             if (team.is_present) {
+                const roomInfo = rooms.find(r => r.name === team.room_no);
+                const roomDetail = roomInfo ? `(${roomInfo.venue} - ${roomInfo.block})` : '';
                 setStatus('success');
-                setMessage(`WELCOME BACK, ${displayName}! YOU ARE ALREADY MARKED PRESENT AND ALLOTTED ROOM: ${team.room_no || 'TBD'}.`);
+                setMessage(`WELCOME BACK, ${displayName}! YOU ARE ALREADY MARKED PRESENT AND ALLOTTED ROOM: ${team.room_no || 'TBD'} ${roomDetail}.`);
                 return;
             }
 
@@ -107,8 +109,11 @@ const MarkAttendance = () => {
                 // We don't fail the whole process if email fails, but we log it
             }
 
+            const roomInfo = rooms.find(r => r.name === selectedRoom);
+            const roomDetail = roomInfo ? `(${roomInfo.venue} - ${roomInfo.block})` : '';
+
             setStatus('success');
-            setMessage(`ATTENDANCE VERIFIED! WELCOME, ${displayName}. YOUR ALLOTTED ROOM IS: ${selectedRoom}`);
+            setMessage(`ATTENDANCE VERIFIED! WELCOME, ${displayName}. YOUR ALLOTTED ROOM IS: ${selectedRoom} ${roomDetail}`);
 
         } catch (err: any) {
             console.error(err);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, IconButton, Tooltip, TextField, InputAdornment, Button, TablePagination } from '@mui/material';
 import { CheckCircle2, XCircle, Search, RefreshCw, Users, FileDown } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { rooms } from '../data/rooms';
 
 const AttendanceAdmin = () => {
     const [teams, setTeams] = useState<any[]>([]);
@@ -263,7 +264,14 @@ const AttendanceAdmin = () => {
                             <TableRow key={team.id} sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' } }}>
                                 <TableCell sx={{ fontWeight: 600, color: 'white' }}>{team.team_name || 'N/A'}</TableCell>
                                 <TableCell sx={{ color: 'text.secondary', fontFamily: 'monospace', letterSpacing: 1 }}>{team.team_code || '---'}</TableCell>
-                                <TableCell sx={{ color: '#00ff00', fontWeight: 700 }}>{team.room_no || 'NOT ASSIGNED'}</TableCell>
+                                <TableCell sx={{ color: '#00ff00', fontWeight: 700 }}>
+                                    <Tooltip title={(() => {
+                                        const room = rooms.find(r => r.name === team.room_no);
+                                        return room ? `${room.venue} (${room.block})` : '';
+                                    })()}>
+                                        <span>{team.room_no || 'NOT ASSIGNED'}</span>
+                                    </Tooltip>
+                                </TableCell>
                                 <TableCell sx={{ textAlign: 'center' }}>
                                     {team.is_present ? (
                                         <Chip

@@ -1,31 +1,38 @@
 export interface Room {
     name: string;
     capacity: number;
+    venue: string;
+    block: string;
+    students: number;
 }
 
 export const rooms: Room[] = [
-    // { name: "LH 101", capacity: 10 },
-    // { name: "LH 102", capacity: 10 },
-    // { name: "LH 103", capacity: 10 },
-    // { name: "LAB 1", capacity: 15 },
-    // { name: "LAB 2", capacity: 15 },
-    // { name: "AUDITORIUM", capacity: 50 },
-    // { name: "SEMINAR HALL", capacity: 30 },
-    {name : "G002", capacity: 16},
-    {name: "G003", capacity: 18},
-    {name: "G004", capacity: 16},
-    {name: "G005", capacity: 16},
-    {name: "G104", capacity: 12},
-    {name: "G110", capacity: 12},
-    {name: "G109", capacity: 12},
-    {name: "G221", capacity: 12},
-    {name: "G210", capacity: 12},
-    {name: "D004", capacity: 7},
-    {name: "F", capacity: 39},
-    {name: "B202", capacity: 9},
-    {name: "B102", capacity: 6},
-    {name: "B103", capacity: 9},
-    {name: "B107", capacity: 7},
-    {name: "B109", capacity: 8},
-    {name: "B111", capacity: 7}    
+    // Block B - Hawkins High School
+    { name: "B202", capacity: 9, students: 35, block: "Block B", venue: "Hawkins High School" },
+    { name: "B102", capacity: 6, students: 24, block: "Block B", venue: "Hawkins High School" },
+    { name: "B103", capacity: 9, students: 36, block: "Block B", venue: "Hawkins High School" },
+    { name: "B107", capacity: 7, students: 26, block: "Block B", venue: "Hawkins High School" },
+    { name: "B109", capacity: 8, students: 30, block: "Block B", venue: "Hawkins High School" },
+    { name: "B111", capacity: 7, students: 28, block: "Block B", venue: "Hawkins High School" },
+
+    // Block G - Castle Byers
+    { name: "G002", capacity: 16, students: 64, block: "Block G", venue: "Castle Byers" },
+    { name: "G003", capacity: 18, students: 72, block: "Block G", venue: "Castle Byers" },
+    { name: "G004", capacity: 16, students: 64, block: "Block G", venue: "Castle Byers" },
+    { name: "G005", capacity: 16, students: 64, block: "Block G", venue: "Castle Byers" },
+    { name: "G104", capacity: 12, students: 54, block: "Block G", venue: "Castle Byers" },
+    { name: "G110", capacity: 12, students: 52, block: "Block G", venue: "Castle Byers" },
+    { name: "G109", capacity: 12, students: 48, block: "Block G", venue: "Castle Byers" },
+    { name: "G221", capacity: 12, students: 48, block: "Block G", venue: "Castle Byers" },
+    { name: "G210", capacity: 12, students: 48, block: "Block G", venue: "Castle Byers" },
+
+    // Block H - Russian Base
+    { name: "H101", capacity: 15, students: 60, block: "Block H", venue: "Russian Base" },
+    { name: "H102", capacity: 11, students: 44, block: "Block H", venue: "Russian Base" },
+    { name: "H103", capacity: 11, students: 46, block: "Block H", venue: "Russian Base" },
+
+    // Block C - Vecna's Lair
+    { name: "C uzone1", capacity: 18, students: 76, block: "Block C", venue: "Vecna's Lair" },
+    { name: "C uzone2", capacity: 11, students: 44, block: "Block C", venue: "Vecna's Lair" },
+    { name: "C uzone 3", capacity: 8, students: 32, block: "Block C", venue: "Vecna's Lair" }
 ];
