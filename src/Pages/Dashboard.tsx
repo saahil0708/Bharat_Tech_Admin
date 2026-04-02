@@ -69,6 +69,12 @@ const Dashboard = () => {
     const [fetchingMembers, setFetchingMembers] = useState(false);
     const [initialMembers, setInitialMembers] = useState<any[]>([]); // To track deletions
 
+    // Judging Panel States
+    const [mentors, setMentors] = useState<any[]>([]); // We keep "mentors" as the variable name for compatibility
+    const [mentorModalOpen, setMentorModalOpen] = useState(false);
+    const [mentorForm, setMentorForm] = useState({ member1: '', member2: '', email: '', assigned_rooms: [] as string[] });
+    const [editingMentorId, setEditingMentorId] = useState<string | null>(null);
+
     const openWhatsappHub = async () => {
         setRefreshing(true);
         try {
@@ -132,8 +138,28 @@ const Dashboard = () => {
         }
     };
 
+    const fetchMentors = async () => {
+        setRefreshing(true);
+        try {
+            const { data, error } = await supabase
+                .from('mentors')
+                .select('*')
+                .order('name', { ascending: true });
+            if (error) throw error;
+            setMentors(data || []);
+        } catch (err: any) {
+            console.error("Mentor Fetch Error:", err);
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
     useEffect(() => {
-        fetchTeams();
+        if (currentTab === 3) {
+            fetchMentors();
+        } else {
+            fetchTeams();
+        }
     }, [page, rowsPerPage, currentTab]);
 
     const handleChangePage = (_: unknown, newPage: number) => {
@@ -410,23 +436,99 @@ const Dashboard = () => {
     };
 
     const handleClearRooms = async () => {
-        const confirmClear = window.confirm("Are you sure you want to clear room assignments for all selected teams?");
+        const confirmClear = window.confirm("Are you sure you want to clear all assigned rooms? This will reset room number for all selected teams.");
         if (!confirmClear) return;
-
         setRefreshing(true);
         try {
             const { error } = await supabase
                 .from('teams')
                 .update({ room_no: null })
                 .eq('is_selected', true);
-
             if (error) throw error;
-
-            alert("Successfully cleared all room assignments for selected teams.");
+            alert("Rooms cleared successfully for all selected teams.");
             fetchTeams();
         } catch (err: any) {
             console.error(err);
             alert("Error clearing rooms: " + err.message);
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
+    const handleClearAttendance = async () => {
+        const confirmClear = window.confirm("Are you sure you want to clear all marked attendance? This will set attendance status to ABSENT for all selected teams.");
+        if (!confirmClear) return;
+        setRefreshing(true);
+        try {
+            const { error } = await supabase
+                .from('teams')
+                .update({ is_present: false })
+                .eq('is_selected', true);
+            if (error) throw error;
+            alert("Attendance cleared successfully for all selected teams.");
+            fetchTeams();
+        } catch (err: any) {
+            console.error(err);
+            alert("Error clearing attendance: " + err.message);
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
+    const handleSaveMentor = async () => {
+        if (!mentorForm.member1 && !mentorForm.member2) {
+            alert("Panel members are required");
+            return;
+        }
+        setRefreshing(true);
+        try {
+            // Store both members in the "name" column as "Member 1 | Member 2"
+            const panelName = `${mentorForm.member1 || '-'} | ${mentorForm.member2 || '-'}`;
+            
+            // Map the array of rooms to a comma-separated string for the existing "room_no" column
+            const joinedRooms = mentorForm.assigned_rooms.join(', ');
+
+            const finalData = { 
+                name: panelName,
+                email: mentorForm.email,
+                room_no: joinedRooms,
+                // phone is not needed as per user request
+            };
+
+            if (editingMentorId) {
+                const { error } = await supabase
+                    .from('mentors')
+                    .update(finalData)
+                    .eq('id', editingMentorId);
+                if (error) throw error;
+                alert("Judging Panel updated!");
+            } else {
+                const { error } = await supabase
+                    .from('mentors')
+                    .insert([finalData]);
+                if (error) throw error;
+                alert("Judging Panel added!");
+            }
+            setMentorModalOpen(false);
+            setMentorForm({ member1: '', member2: '', email: '', assigned_rooms: [] });
+            setEditingMentorId(null);
+            fetchMentors();
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
+    const handleDeleteMentorById = async (id: string) => {
+        if (!window.confirm("Are you sure you want to delete this panel?")) return;
+        setRefreshing(true);
+        try {
+            const { error } = await supabase.from('mentors').delete().eq('id', id);
+            if (error) throw error;
+            fetchMentors();
+        } catch (err: any) {
+            alert(err.message);
         } finally {
             setRefreshing(false);
         }
@@ -503,9 +605,13 @@ const Dashboard = () => {
                     <Tab label="DIRECTORY" />
                     <Tab label="MANAGE TEAMS" />
                     <Tab label="SELECTED TEAMS" />
+                    <Tab label="JUDGING PANELS" />
                 </Tabs>
+            </Box>
 
-                <Stack spacing={2} sx={{ width: { xs: '100%', md: 'auto' }, alignItems: { xs: 'stretch', md: 'flex-end' } }}>
+            {/* Teams Management Content (Tabs 0, 1, 2) */}
+            {(currentTab === 0 || currentTab === 1 || currentTab === 2) && (
+                <Stack spacing={2} sx={{ width: '100%', mb: 3 }}>
                     {/* Bulk Email UI (On Top of Searchbar) */}
                     {currentTab === 2 && (
                         <Box sx={{ display: 'flex', gap: 2, width: '100%', justifyContent: { xs: 'flex-start', md: 'flex-end' }, flexWrap: 'wrap' }}>
@@ -516,18 +622,38 @@ const Dashboard = () => {
                                 sx={{
                                     borderRadius: 0.5,
                                     fontFamily: 'Azonix',
-                                    px: 3,
+                                    px: 2,
+                                    bgcolor: 'rgba(255,165,0,0.1)',
+                                    color: '#ffa500',
+                                    border: '1px solid rgba(255,165,0,0.5)',
+                                    fontWeight: 800,
+                                    boxShadow: 'none',
+                                    '&:hover': { bgcolor: '#ffa500', color: 'black' },
+                                    '&.Mui-disabled': { bgcolor: 'rgba(255,165,0,0.05)', color: 'rgba(255,165,0,0.2)' }
+                                }}
+                                startIcon={<Trash2 size={18} />}
+                            >
+                                CLEAR ROOMS
+                            </Button>
+                            <Button
+                                variant="contained"
+                                onClick={handleClearAttendance}
+                                disabled={refreshing}
+                                sx={{
+                                    borderRadius: 0.5,
+                                    fontFamily: 'Azonix',
+                                    px: 2,
                                     bgcolor: 'rgba(255,0,0,0.1)',
                                     color: '#ff0000',
                                     border: '1px solid rgba(255,0,0,0.5)',
                                     fontWeight: 800,
                                     boxShadow: 'none',
-                                    '&:hover': { bgcolor: '#ff0000', color: 'black' },
+                                    '&:hover': { bgcolor: '#ff0000', color: 'white' },
                                     '&.Mui-disabled': { bgcolor: 'rgba(255,0,0,0.05)', color: 'rgba(255,0,0,0.2)' }
                                 }}
-                                startIcon={<Trash2 size={18} />}
+                                startIcon={<XCircle size={18} />}
                             >
-                                CLEAR ROOMS
+                                CLEAR ATTENDANCE
                             </Button>
                             <Button
                                 variant="contained"
@@ -586,7 +712,6 @@ const Dashboard = () => {
                                 <Select
                                     value={bulkEmailType}
                                     onChange={(e) => setBulkEmailType(e.target.value)}
-                                    // Make sure Paper matches dark theme
                                     MenuProps={{
                                         PaperProps: {
                                             sx: {
@@ -619,7 +744,6 @@ const Dashboard = () => {
                                     bgcolor: '#00ff00',
                                     color: '#000',
                                     fontWeight: 800,
-                                    borderColor: 'transparent',
                                     '&:hover': { bgcolor: '#00cc00' },
                                     '&.Mui-disabled': { bgcolor: 'rgba(0,255,0,0.3)', color: 'rgba(0,0,0,0.5)' }
                                 }}
@@ -631,7 +755,7 @@ const Dashboard = () => {
                     )}
 
                     {/* Search Bar UI */}
-                    <Box sx={{ display: 'flex', gap: 2, width: '100%' }}>
+                    <Box sx={{ display: 'flex', gap: 2, width: '100%', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                         <TextField
                             placeholder="Search Teams, Leaders..."
                             variant="outlined"
@@ -644,7 +768,6 @@ const Dashboard = () => {
                             }}
                             sx={{
                                 flexGrow: 1,
-                                minWidth: { xs: '100%', md: '250px' },
                                 '& .MuiOutlinedInput-root': {
                                     borderRadius: 1,
                                     bgcolor: 'rgba(255,255,255,0.02)',
@@ -663,7 +786,6 @@ const Dashboard = () => {
                             onKeyDown={(e) => e.key === 'Enter' && fetchTeams()}
                             sx={{
                                 flexGrow: 1,
-                                minWidth: { xs: '100%', md: '200px' },
                                 '& .MuiOutlinedInput-root': {
                                     borderRadius: 1,
                                     bgcolor: 'rgba(255,255,255,0.02)',
@@ -682,7 +804,6 @@ const Dashboard = () => {
                             onKeyDown={(e) => e.key === 'Enter' && fetchTeams()}
                             sx={{
                                 flexGrow: 1,
-                                minWidth: { xs: '100%', md: '200px' },
                                 '& .MuiOutlinedInput-root': {
                                     borderRadius: 1,
                                     bgcolor: 'rgba(255,255,255,0.02)',
@@ -695,175 +816,331 @@ const Dashboard = () => {
                         <Button
                             variant="contained"
                             onClick={() => { setPage(0); fetchTeams(); }}
-                            sx={{ borderRadius: 0.5, fontFamily: 'Azonix', px: 3, boxShadow: '0 0 10px rgba(255,0,0,0.3)' }}
+                            sx={{ borderRadius: 0.5, fontFamily: 'Azonix', px: 3 }}
                         >
                             SEARCH
                         </Button>
                     </Box>
-                </Stack>
-            </Box>
 
-            {error && (
-                <Paper sx={{ p: 2, mb: 3, bgcolor: 'rgba(255,0,0,0.1)', border: '1px solid #ff0000', color: '#ff0000' }}>
-                    Error loading teams: {error}
-                </Paper>
+                    {error && (
+                        <Paper sx={{ p: 2, bgcolor: 'rgba(255,0,0,0.1)', border: '1px solid #ff0000', color: '#ff0000' }}>
+                            Error loading teams: {error}
+                        </Paper>
+                    )}
+
+                    <TableContainer component={Paper} sx={{ bgcolor: 'background.paper', borderRadius: 1, border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <Table sx={{ minWidth: 650 }}>
+                            <TableHead>
+                                <TableRow sx={{ bgcolor: 'rgba(255,0,0,0.05)' }}>
+                                    {displayColumns.map((col) => (
+                                        <TableCell key={col} sx={{ fontWeight: 800, color: 'primary.main', textTransform: 'uppercase', py: 2, fontFamily: 'Azonix' }}>
+                                            {col.replace(/_/g, ' ')}
+                                        </TableCell>
+                                    ))}
+                                    {displayColumns.length > 0 && <TableCell sx={{ fontWeight: 800, color: 'primary.main', textTransform: 'uppercase', py: 2, textAlign: 'right', fontFamily: 'Azonix' }}>ACTIONS</TableCell>}
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {teams.length > 0 ? (
+                                    teams.map((team, idx) => (
+                                        <TableRow 
+                                            key={team.id || idx} 
+                                            sx={{ 
+                                                '&:last-child td, &:last-child th': { border: 0 },
+                                                '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' },
+                                                transition: '0.2s'
+                                            }}
+                                        >
+                                            {displayColumns.map((col) => {
+                                                const val = team[col];
+                                                let content = val;
+                                                if (typeof val === 'boolean') {
+                                                    content = <Chip size="small" label={val ? 'Yes' : 'No'} color={val ? 'success' : 'default'} />;
+                                                } else if (typeof val === 'object' && val !== null) {
+                                                    content = JSON.stringify(val);
+                                                } else if (typeof val === 'string' && col.includes('at') && val.includes('T')) {
+                                                    content = new Date(val).toLocaleDateString();
+                                                }
+
+                                                let displayContent: React.ReactNode = content || '-';
+                                                if (typeof content === 'string' && content.length > 50) {
+                                                    displayContent = (
+                                                        <>
+                                                            {content.substring(0, 50)}
+                                                            <span 
+                                                                style={{ color: '#ff0000', cursor: 'pointer', marginLeft: '4px', fontWeight: 'bold' }}
+                                                                onClick={() => setSelectedTeam(team)}
+                                                            >
+                                                                see more...
+                                                            </span>
+                                                        </>
+                                                    );
+                                                }
+
+                                                return (
+                                                    <TableCell key={col} sx={{ py: 2, color: 'text.secondary', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                        {displayContent}
+                                                    </TableCell>
+                                                );
+                                            })}
+                                            <TableCell sx={{ py: 2, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                                {currentTab === 0 || currentTab === 2 ? (
+                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                        <Button
+                                                            variant="outlined"
+                                                            size="small"
+                                                            color="primary"
+                                                            startIcon={<Eye size={16} />}
+                                                            onClick={() => setSelectedTeam(team)}
+                                                            sx={{ fontWeight: 800, borderRadius: 0.6, px: 2 }}
+                                                        >
+                                                            VIEW
+                                                        </Button>
+                                                        <Button
+                                                            variant="contained"
+                                                            size="small"
+                                                            disabled={processingSelectionId === team.id}
+                                                            onClick={() => handleToggleSelection(team)}
+                                                            sx={{
+                                                                fontWeight: 800, borderRadius: 0.6, px: 2,
+                                                                bgcolor: team.is_selected ? 'rgba(255,165,0,0.1)' : 'rgba(0,191,255,0.1)',
+                                                                color: team.is_selected ? '#ffa500' : '#00bfff',
+                                                                border: `1px solid ${team.is_selected ? 'rgba(255,165,0,0.5)' : 'rgba(0,191,255,0.5)'}`,
+                                                                '&:hover': { bgcolor: team.is_selected ? '#ffa500' : '#00bfff', color: team.is_selected ? 'black' : 'white' }
+                                                            }}
+                                                        >
+                                                            {processingSelectionId === team.id ? 'PROCESSING...' : team.is_selected ? 'DESELECT' : 'SELECT'}
+                                                        </Button>
+                                                    </Stack>
+                                                ) : (
+                                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                        <Button
+                                                            variant="outlined"
+                                                            size="small"
+                                                            startIcon={<Edit size={16} />}
+                                                            onClick={() => openEditModal(team)}
+                                                            sx={{ fontWeight: 800, borderRadius: 0.6, px: 2, color: '#00ccff', borderColor: 'rgba(0,204,255,0.5)', '&:hover': { bgcolor: 'rgba(0,204,255,0.1)', borderColor: '#00ccff' } }}
+                                                        >
+                                                            EDIT
+                                                        </Button>
+                                                        <Button
+                                                            variant="contained"
+                                                            size="small"
+                                                            startIcon={<Trash2 size={16} />}
+                                                            onClick={() => setDeleteTeamId(team.id)}
+                                                            sx={{ fontWeight: 800, borderRadius: 0.6, px: 2, bgcolor: 'rgba(255,0,0,0.1)', color: '#ff0000', border: '1px solid rgba(255,0,0,0.5)', '&:hover': { bgcolor: '#ff0000', color: 'white' } }}
+                                                        >
+                                                            DELETE
+                                                        </Button>
+                                                    </Stack>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                ) : (
+                                    <TableRow>
+                                        <TableCell colSpan={displayColumns.length + 1} align="center" sx={{ py: 10 }}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, opacity: 0.8 }}>
+                                                <Box sx={{ p: 3, borderRadius: '50%', bgcolor: 'rgba(255,0,0,0.05)', border: '1px dashed rgba(255,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <Database size={48} color="#ff0000" />
+                                                </Box>
+                                                <Typography variant="h6" sx={{ color: 'text.primary', fontWeight: 800, letterSpacing: 1 }}>NO DATA ENCOUNTERED</Typography>
+                                            </Box>
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                        {teams.length > 0 && (
+                            <TablePagination
+                                component="div"
+                                count={totalCount}
+                                page={page}
+                                onPageChange={handleChangePage}
+                                rowsPerPage={rowsPerPage}
+                                onRowsPerPageChange={handleChangeRowsPerPage}
+                                sx={{ borderTop: '1px solid rgba(255, 0, 0, 0.1)', color: 'text.secondary' }}
+                            />
+                        )}
+                    </TableContainer>
+                </Stack>
             )}
 
-            <TableContainer component={Paper} sx={{ bgcolor: 'background.paper', borderRadius: 1, border: '1px solid rgba(255,255,255,0.05)' }}>
-                <Table sx={{ minWidth: 650 }}>
-                    <TableHead>
-                        <TableRow sx={{ bgcolor: 'rgba(255,0,0,0.05)' }}>
-                            {displayColumns.map((col) => (
-                                <TableCell key={col} sx={{ fontWeight: 800, color: 'primary.main', textTransform: 'uppercase', py: 2, fontFamily: 'Azonix' }}>
-                                    {col.replace(/_/g, ' ')}
-                                </TableCell>
-                            ))}
-                            {displayColumns.length > 0 && <TableCell sx={{ fontWeight: 800, color: 'primary.main', textTransform: 'uppercase', py: 2, textAlign: 'right', fontFamily: 'Azonix' }}>ACTIONS</TableCell>}
-                            {displayColumns.length === 0 && <TableCell sx={{ fontWeight: 800, color: 'primary.main', py: 2, textAlign: 'center', fontFamily: 'Azonix' }}>SYSTEM STATUS</TableCell>}
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {teams.length > 0 ? (
-                            teams.map((team, idx) => (
-                                <TableRow
-                                    key={team.id || idx}
-                                    sx={{
-                                        '&:last-child td, &:last-child th': { border: 0 },
-                                        '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' },
-                                        transition: '0.2s'
-                                    }}
-                                >
-                                    {displayColumns.map((col) => {
-                                        const val = team[col];
-                                        let content = val;
-                                        if (typeof val === 'boolean') {
-                                            content = <Chip size="small" label={val ? 'Yes' : 'No'} color={val ? 'success' : 'default'} />;
-                                        } else if (typeof val === 'object' && val !== null) {
-                                            content = JSON.stringify(val);
-                                        } else if (typeof val === 'string' && col.includes('at') && val.includes('T')) {
-                                            content = new Date(val).toLocaleDateString();
-                                        }
-
-                                        let displayContent: React.ReactNode = content || '-';
-                                        if (typeof content === 'string' && content.length > 50) {
-                                            displayContent = (
-                                                <>
-                                                    {content.substring(0, 50)}
-                                                    <span
-                                                        style={{ color: '#ff0000', cursor: 'pointer', marginLeft: '4px', fontWeight: 'bold' }}
-                                                        onClick={() => setSelectedTeam(team)}
-                                                    >
-                                                        see more...
-                                                    </span>
-                                                </>
-                                            );
-                                        }
-
-                                        return (
-                                            <TableCell key={col} sx={{ py: 2, color: 'text.secondary', maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                {displayContent}
+            {/* Judging Panels Tab Content (Tab 3) */}
+            {currentTab === 3 && (
+                <Box>
+                    <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+                        <Button
+                            variant="contained"
+                            startIcon={<Plus size={18} />}
+                            onClick={() => {
+                                setEditingMentorId(null);
+                                setMentorForm({ member1: '', member2: '', email: '', assigned_rooms: [] });
+                                setMentorModalOpen(true);
+                            }}
+                            sx={{ bgcolor: '#00ff00', color: 'black', fontWeight: 800, fontFamily: 'Azonix', '&:hover': { bgcolor: '#00cc00' } }}
+                        >
+                            CREATE PANEL
+                        </Button>
+                    </Box>
+                    <TableContainer component={Paper} sx={{ bgcolor: 'background.paper', borderRadius: 1, border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <Table sx={{ minWidth: 650 }}>
+                            <TableHead>
+                                <TableRow sx={{ bgcolor: 'rgba(255,0,0,0.05)' }}>
+                                    <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>PANEL MEMBERS</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>CONTACT EMAIL</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>ASSIGNED ROOMS</TableCell>
+                                    <TableCell sx={{ fontWeight: 800, color: 'primary.main', textAlign: 'right', fontFamily: 'Azonix' }}>ACTIONS</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {mentors.map((panel) => {
+                                    const names = panel.name?.split(' | ') || ['Unknown', 'Unknown'];
+                                    const assignedRooms = panel.room_no?.split(', ').filter(Boolean) || [];
+                                    return (
+                                        <TableRow key={panel.id} sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' } }}>
+                                            <TableCell>
+                                                <Stack spacing={0.5}>
+                                                    <Typography sx={{ fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                        <Users size={14} color="#00ff00" /> {names[0]}
+                                                    </Typography>
+                                                    <Typography sx={{ fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                        <Users size={14} color="#00ff00" /> {names[1]}
+                                                    </Typography>
+                                                </Stack>
                                             </TableCell>
-                                        );
-                                    })}
-                                    <TableCell sx={{ py: 2, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                                        {currentTab === 0 || currentTab === 2 ? (
-                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                            <TableCell sx={{ color: 'text.secondary' }}>{panel.email || '-'}</TableCell>
+                                            <TableCell>
+                                                <Stack direction="row" spacing={0.5} flexWrap="wrap" gap={0.5}>
+                                                    {assignedRooms.length > 0 ? (
+                                                        assignedRooms.map((roomName: string) => (
+                                                            <Chip 
+                                                                key={roomName}
+                                                                label={roomName}
+                                                                size="small"
+                                                                sx={{ bgcolor: 'rgba(0,255,0,0.1)', color: '#00ff00', border: '1px solid rgba(0,255,0,0.2)', fontSize: '0.7rem' }}
+                                                            />
+                                                        ))
+                                                    ) : (
+                                                        <Typography variant="caption" color="text.disabled">No rooms assigned</Typography>
+                                                    )}
+                                                </Stack>
+                                            </TableCell>
+                                            <TableCell sx={{ textAlign: 'right' }}>
+                                                <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                                    <IconButton 
+                                                        size="small" 
+                                                        onClick={() => {
+                                                            setEditingMentorId(panel.id);
+                                                            const existingNames = panel.name?.split(' | ') || ['', ''];
+                                                            setMentorForm({ 
+                                                                member1: existingNames[0] || '', 
+                                                                member2: existingNames[1] || '', 
+                                                                email: panel.email || '', 
+                                                                assigned_rooms: assignedRooms 
+                                                            });
+                                                            setMentorModalOpen(true);
+                                                        }}
+                                                        sx={{ color: '#00bfff', '&:hover': { bgcolor: 'rgba(0,191,255,0.1)' } }}
+                                                    >
+                                                        <Edit size={18} />
+                                                    </IconButton>
+                                                    <IconButton 
+                                                        size="small" 
+                                                        onClick={() => handleDeleteMentorById(panel.id)}
+                                                        sx={{ color: '#ff0000', '&:hover': { bgcolor: 'rgba(255,0,0,0.1)' } }}
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </IconButton>
+                                                </Stack>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+
+                    {/* Panel Add/Edit Dialog */}
+                    <Dialog open={mentorModalOpen} onClose={() => setMentorModalOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { bgcolor: '#0a0a0a', border: '1px solid rgba(255,0,0,0.2)', borderRadius: 2 } }}>
+                        <DialogTitle sx={{ fontFamily: 'Azonix', color: '#ff0000', borderBottom: '1px solid rgba(255,0,0,0.1)', mb: 2 }}>
+                            {editingMentorId ? 'EDIT PANEL' : 'CREATE NEW PANEL'}
+                        </DialogTitle>
+                        <DialogContent>
+                            <Stack spacing={3} sx={{ mt: 1 }}>
+                                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                                    <TextField
+                                        label="Member 1 Name"
+                                        value={mentorForm.member1}
+                                        onChange={(e) => setMentorForm({ ...mentorForm, member1: e.target.value })}
+                                        variant="outlined"
+                                        size="small"
+                                        sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'rgba(255,255,255,0.02)' } }}
+                                    />
+                                    <TextField
+                                        label="Member 2 Name"
+                                        value={mentorForm.member2}
+                                        onChange={(e) => setMentorForm({ ...mentorForm, member2: e.target.value })}
+                                        variant="outlined"
+                                        size="small"
+                                        sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'rgba(255,255,255,0.02)' } }}
+                                    />
+                                </Box>
+                                <TextField
+                                    fullWidth
+                                    label="Panel Lead Email"
+                                    value={mentorForm.email}
+                                    onChange={(e) => setMentorForm({ ...mentorForm, email: e.target.value })}
+                                    variant="outlined"
+                                    size="small"
+                                    sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'rgba(255,255,255,0.02)' } }}
+                                />
+                                <Box>
+                                    <Typography variant="overline" sx={{ color: '#ff0000', fontWeight: 800, mb: 1, display: 'block' }}>ASSIGN ROOMS</Typography>
+                                    <Box sx={{ maxHeight: 200, overflowY: 'auto', p: 1, border: '1px solid rgba(255,255,255,0.05)', borderRadius: 1, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1 }}>
+                                        {rooms.map((room) => {
+                                            const isSelected = mentorForm.assigned_rooms.includes(room.name);
+                                            return (
                                                 <Button
+                                                    key={room.name}
+                                                    size="small"
                                                     variant="outlined"
-                                                    size="small"
-                                                    color="primary"
-                                                    startIcon={<Eye size={16} />}
-                                                    onClick={() => setSelectedTeam(team)}
-                                                    sx={{ fontWeight: 800, borderRadius: 0.6, px: 2 }}
-                                                >
-                                                    VIEW
-                                                </Button>
-                                                <Button
-                                                    variant="contained"
-                                                    size="small"
-                                                    disabled={processingSelectionId === team.id}
-                                                    onClick={() => handleToggleSelection(team)}
+                                                    onClick={() => {
+                                                        const newRooms = isSelected
+                                                            ? mentorForm.assigned_rooms.filter(r => r !== room.name)
+                                                            : [...mentorForm.assigned_rooms, room.name];
+                                                        setMentorForm({ ...mentorForm, assigned_rooms: newRooms });
+                                                    }}
                                                     sx={{
-                                                        fontWeight: 800, borderRadius: 0.6, px: 2,
-                                                        bgcolor: team.is_selected ? 'rgba(255,165,0,0.1)' : 'rgba(0,191,255,0.1)',
-                                                        color: team.is_selected ? '#ffa500' : '#00bfff',
-                                                        border: `1px solid ${team.is_selected ? 'rgba(255,165,0,0.5)' : 'rgba(0,191,255,0.5)'}`,
-                                                        '&:hover': { bgcolor: team.is_selected ? '#ffa500' : '#00bfff', color: team.is_selected ? 'black' : 'white' }
+                                                        fontSize: '0.7rem',
+                                                        fontWeight: 800,
+                                                        borderColor: isSelected ? '#00ff00' : 'rgba(255,255,255,0.1)',
+                                                        bgcolor: isSelected ? 'rgba(0,255,0,0.1)' : 'transparent',
+                                                        color: isSelected ? '#00ff00' : 'text.secondary',
+                                                        '&:hover': { bgcolor: isSelected ? 'rgba(0,255,0,0.2)' : 'rgba(255,255,255,0.05)', borderColor: isSelected ? '#00ff00' : 'rgba(255,255,255,0.3)' }
                                                     }}
                                                 >
-                                                    {processingSelectionId === team.id ? 'PROCESSING...' : team.is_selected ? 'DESELECT' : 'SELECT'}
+                                                    {room.name}
                                                 </Button>
-                                            </Stack>
-                                        ) : (
-                                            <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                                <Button
-                                                    variant="outlined"
-                                                    size="small"
-                                                    startIcon={<Edit size={16} />}
-                                                    onClick={() => openEditModal(team)}
-                                                    sx={{ fontWeight: 800, borderRadius: 0.6, px: 2, color: '#00ccff', borderColor: 'rgba(0,204,255,0.5)', '&:hover': { bgcolor: 'rgba(0,204,255,0.1)', borderColor: '#00ccff' } }}
-                                                >
-                                                    EDIT
-                                                </Button>
-                                                <Button
-                                                    variant="contained"
-                                                    size="small"
-                                                    startIcon={<Trash2 size={16} />}
-                                                    onClick={() => setDeleteTeamId(team.id)}
-                                                    sx={{ fontWeight: 800, borderRadius: 0.6, px: 2, bgcolor: 'rgba(255,0,0,0.1)', color: '#ff0000', border: '1px solid rgba(255,0,0,0.5)', '&:hover': { bgcolor: '#ff0000', color: 'white' } }}
-                                                >
-                                                    DELETE
-                                                </Button>
-                                            </Stack>
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell colSpan={(displayColumns.length || 0) + 1} align="center" sx={{ py: 10 }}>
-                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, opacity: 0.8 }}>
-                                        <Box sx={{
-                                            p: 3,
-                                            borderRadius: '50%',
-                                            bgcolor: 'rgba(255,0,0,0.05)',
-                                            border: '1px dashed rgba(255,0,0,0.3)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                        }}>
-                                            <Database size={48} color="#ff0000" />
-                                        </Box>
-                                        <Typography variant="h6" sx={{ color: 'text.primary', fontWeight: 800, letterSpacing: 1 }}>
-                                            NO DATA ENCOUNTERED
-                                        </Typography>
-                                        <Typography variant="body2" sx={{ color: 'text.secondary', maxWidth: 350, textAlign: 'center', lineHeight: 1.6 }}>
-                                            The system could not locate any registered teams matching your criteria.
-                                        </Typography>
+                                            );
+                                        })}
                                     </Box>
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                </Table>
-
-                {teams.length > 0 && (
-                    <TablePagination
-                        component="div"
-                        count={totalCount}
-                        page={page}
-                        onPageChange={handleChangePage}
-                        rowsPerPage={rowsPerPage}
-                        onRowsPerPageChange={handleChangeRowsPerPage}
-                        sx={{
-                            borderTop: '1px solid rgba(255, 0, 0, 0.1)',
-                            color: 'text.secondary',
-                            '.MuiTablePagination-selectIcon': { color: 'text.secondary' },
-                            '.MuiTablePagination-actions button': { color: 'text.secondary' }
-                        }}
-                    />
-                )}
-            </TableContainer>
+                                </Box>
+                            </Stack>
+                        </DialogContent>
+                        <DialogActions sx={{ p: 3, borderTop: '1px solid rgba(255,0,0,0.1)' }}>
+                            <Button onClick={() => setMentorModalOpen(false)} sx={{ color: 'text.secondary', fontWeight: 800 }}>CANCEL</Button>
+                            <Button 
+                                onClick={handleSaveMentor} 
+                                variant="contained" 
+                                sx={{ bgcolor: '#ff0000', color: 'white', fontWeight: 800, px: 4, '&:hover': { bgcolor: '#cc0000' } }}
+                            >
+                                SAVE PANEL
+                            </Button>
+                        </DialogActions>
+                    </Dialog>
+                </Box>
+            )}
 
             {/* View More Details Modal */}
             <Dialog

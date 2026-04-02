@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Box, Typography, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, IconButton, Tooltip, TextField, InputAdornment, Button, TablePagination } from '@mui/material';
-import { CheckCircle2, XCircle, Search, RefreshCw, Users, FileDown, Trash2 } from 'lucide-react';
+import { CheckCircle2, XCircle, Search, RefreshCw, Users, FileDown } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 
 const AttendanceAdmin = () => {
@@ -121,76 +121,29 @@ const AttendanceAdmin = () => {
         }
     };
 
-    const handleToggleAttendance = async (teamId: string, currentStatus: boolean) => {
-        setLoading(true);
-        try {
-            const { error } = await supabase
-                .from('teams')
-                .update({ 
-                    is_present: !currentStatus,
-                    // If marking absent, also clear the room
-                    ...(!currentStatus ? {} : { room_no: null })
-                })
-                .eq('id', teamId);
-
-            if (error) throw error;
-            await fetchAttendance();
-        } catch (err: any) {
-            console.error(err);
-            alert("Failed to update status: " + err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleBulkReset = async () => {
-        if (!window.confirm("WARNING: This will mark ALL teams as ABSENT and clear ALL room allotments. Proceed?")) return;
-
-        setLoading(true);
-        try {
-            const { error } = await supabase
-                .from('teams')
-                .update({ 
-                    is_present: false, 
-                    room_no: null 
-                })
-                .neq('id', '00000000-0000-0000-0000-000000000000'); // Update all rows (using a dummy UUID to target all records)
-
-            if (error) throw error;
-            alert("System reset successful.");
-            await fetchAttendance();
-        } catch (err: any) {
-            console.error(err);
-            alert("Failed to reset system: " + err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleResetAttendance = async (teamId: string) => {
-        if (!window.confirm("Are you sure you want to reset attendance and room allotment for this team?")) return;
-
-        setLoading(true);
-        try {
-            const { error } = await supabase
-                .from('teams')
-                .update({ 
-                    is_present: false, 
-                    room_no: null 
-                })
-                .eq('id', teamId);
-
-            if (error) throw error;
-            await fetchAttendance();
-        } catch (err: any) {
-            console.error(err);
-            alert("Failed to reset: " + err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     // Remove local presentCount calculation as it only reflects current page
+
+    const handleClearAllAttendance = async () => {
+        const confirmClear = window.confirm("TESTING: Are you sure you want to clear ALL marked attendance across the entire database? This will set is_present to false for all 400+ teams.");
+        if (!confirmClear) return;
+        setLoading(true);
+        try {
+            // Update all records where is_present is true to false
+            const { error } = await supabase
+                .from('teams')
+                .update({ is_present: false })
+                .eq('is_present', true);
+            
+            if (error) throw error;
+            alert("All attendance records cleared successfully.");
+            fetchAttendance();
+        } catch (err: any) {
+            console.error(err);
+            alert("Error clearing attendance: " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <Box>
@@ -211,6 +164,14 @@ const AttendanceAdmin = () => {
                         <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 800 }}>TEAMS PRESENT</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Tooltip title="Clear All Attendance (TESTING)">
+                            <IconButton
+                                onClick={handleClearAllAttendance}
+                                sx={{ bgcolor: 'rgba(255,0,0,0.1)', color: '#ff0000', border: '1px solid rgba(255,0,0,0.5)', borderRadius: 2, p: 1.5, '&:hover': { bgcolor: 'rgba(255,0,0,0.2)' } }}
+                            >
+                                <XCircle size={20} />
+                            </IconButton>
+                        </Tooltip>
                         <Tooltip title="Refresh Data">
                             <IconButton
                                 onClick={fetchAttendance}
@@ -218,16 +179,6 @@ const AttendanceAdmin = () => {
                             >
                                 <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
                             </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Bulk Clear All Attendance & Rooms">
-                            <Button
-                                variant="contained"
-                                onClick={handleBulkReset}
-                                sx={{ bgcolor: 'rgba(255,255,255,0.05)', color: '#ff0000', border: '1px solid rgba(255,0,0,0.3)', borderRadius: 2, px: 2, fontWeight: 800, '&:hover': { bgcolor: 'rgba(255,0,0,0.1)' } }}
-                                startIcon={<Trash2 size={18} />}
-                            >
-                                CLEAR ALL
-                            </Button>
                         </Tooltip>
                         <Tooltip title="Export Report">
                             <Button
@@ -305,7 +256,6 @@ const AttendanceAdmin = () => {
                             <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>UNIQUE CODE</TableCell>
                             <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix' }}>ROOM NO</TableCell>
                             <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix', textAlign: 'center' }}>STATUS</TableCell>
-                            <TableCell sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Azonix', textAlign: 'center' }}>ACTIONS</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
@@ -315,33 +265,23 @@ const AttendanceAdmin = () => {
                                 <TableCell sx={{ color: 'text.secondary', fontFamily: 'monospace', letterSpacing: 1 }}>{team.team_code || '---'}</TableCell>
                                 <TableCell sx={{ color: '#00ff00', fontWeight: 700 }}>{team.room_no || 'NOT ASSIGNED'}</TableCell>
                                 <TableCell sx={{ textAlign: 'center' }}>
-                                    <Tooltip title={team.is_present ? "Mark as Absent" : "Mark as Present"}>
+                                    {team.is_present ? (
                                         <Chip
-                                            icon={team.is_present ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-                                            label={team.is_present ? "PRESENT" : "ABSENT"}
-                                            color={team.is_present ? "success" : "error"}
+                                            icon={<CheckCircle2 size={16} />}
+                                            label="PRESENT"
+                                            color="success"
                                             variant="outlined"
-                                            onClick={() => handleToggleAttendance(team.id, team.is_present)}
-                                            sx={{ 
-                                                fontWeight: 800, 
-                                                cursor: 'pointer',
-                                                borderColor: team.is_present ? 'rgba(0,255,0,0.5)' : 'rgba(255,0,0,0.3)', 
-                                                bgcolor: team.is_present ? 'rgba(0,255,0,0.1)' : 'rgba(255,0,0,0.05)',
-                                                '&:hover': { bgcolor: team.is_present ? 'rgba(0,255,0,0.2)' : 'rgba(255,0,0,0.1)' }
-                                            }}
+                                            sx={{ fontWeight: 800, borderColor: 'rgba(0,255,0,0.5)', bgcolor: 'rgba(0,255,0,0.1)' }}
                                         />
-                                    </Tooltip>
-                                </TableCell>
-                                <TableCell sx={{ textAlign: 'center' }}>
-                                    <Tooltip title="Reset Attendance & Room">
-                                        <IconButton 
-                                            onClick={() => handleResetAttendance(team.id)}
-                                            size="small"
-                                            sx={{ color: '#ff0000', '&:hover': { bgcolor: 'rgba(255,0,0,0.1)' } }}
-                                        >
-                                            <RefreshCw size={18} />
-                                        </IconButton>
-                                    </Tooltip>
+                                    ) : (
+                                        <Chip
+                                            icon={<XCircle size={16} />}
+                                            label="ABSENT"
+                                            color="error"
+                                            variant="outlined"
+                                            sx={{ fontWeight: 800, borderColor: 'rgba(255,0,0,0.3)', color: 'text.secondary' }}
+                                        />
+                                    )}
                                 </TableCell>
                             </TableRow>
                         ))}
