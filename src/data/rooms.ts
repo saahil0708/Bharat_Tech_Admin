@@ -22,9 +22,9 @@ export const rooms: Room[] = [
     { name: "G005", capacity: 16, students: 64, block: "Block G", venue: "Castle Byers" },
     { name: "G104", capacity: 12, students: 54, block: "Block G", venue: "Castle Byers" },
     { name: "G110", capacity: 12, students: 52, block: "Block G", venue: "Castle Byers" },
-    { name: "G109", capacity: 12, students: 48, block: "Block G", venue: "Castle Byers" },
-    { name: "G221", capacity: 12, students: 48, block: "Block G", venue: "Castle Byers" },
-    { name: "G210", capacity: 12, students: 48, block: "Block G", venue: "Castle Byers" },
+    { name: "G213", capacity: 12, students: 48, block: "Block G", venue: "Castle Byers" },
+    { name: "G212", capacity: 12, students: 48, block: "Block G", venue: "Castle Byers" },
+    { name: "G111", capacity: 12, students: 48, block: "Block G", venue: "Castle Byers" },
 
     // Block H - Russian Base
     { name: "H101", capacity: 15, students: 60, block: "Block H", venue: "Russian Base" },
